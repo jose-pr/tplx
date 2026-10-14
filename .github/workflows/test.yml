@@ -68,7 +68,75 @@ jobs:
         # silently skip (pytest.importorskip) instead of actually running.
         run: python -m pip install -e ".[dev]"
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q -rs
+
+  # ERB and EPP render through real programs. GitHub's ubuntu image ships ruby
+  # but not puppet; puppet comes from its gem, so the EPP tests run rather
+  # than skip.
+  external-engines:
+    name: ERB and EPP through ruby and puppet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install puppet
+        run: |
+          sudo gem install puppet --no-document
+          ruby --version
+          puppet --version
+      - name: Install package with all extras
+        run: python -m pip install -e ".[dev]"
+      - name: Run the ERB and EPP tests; none may skip
+        run: |
+          set -o pipefail
+          python -m pytest -q -rs -k "erb or epp or ERB or EPP" | tee pytest.log
+          if grep -q "SKIPPED" pytest.log; then exit 1; fi
+
+  # What a user installs is the wheel: build it, install it bare and with the
+  # cli extra into fresh environments, and run the console script, on each OS.
+  wheel-smoke:
+    name: Installed-wheel smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build the wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist
+      - name: Install it bare and with the cli extra
+        run: |
+          python -m venv smoke-bare
+          python -m venv smoke-cli
+          bin=bin; if [ "$RUNNER_OS" = "Windows" ]; then bin=Scripts; fi
+          echo "BIN=$bin" >> "$GITHUB_ENV"
+          wheel=$(ls dist/*.whl)
+          smoke-bare/$bin/python -m pip install "$wheel"
+          smoke-cli/$bin/python -m pip install "$wheel[cli]"
+      - name: The bare install imports and names the extra the command needs
+        run: |
+          smoke-bare/$BIN/python -c "import tplx; print(tplx.__version__)"
+          if smoke-bare/$BIN/tplx --version 2> err.txt; then exit 1; fi
+          grep -q "cli" err.txt
+      - name: The command runs with the cli extra
+        run: |
+          smoke-cli/$BIN/tplx --version
+          smoke-cli/$BIN/tplx engines
 
   # The declared floors, exercised: every runtime dependency and feature extra
   # installed AT the lower bound pyproject.toml declares (`>=X.Y.0` -> `==X.Y.0`),
@@ -109,4 +177,4 @@ jobs:
       - name: Install at the floors
         run: python -m pip install -c floors.txt -e ".[dev]"
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q -rs
