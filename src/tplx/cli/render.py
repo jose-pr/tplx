@@ -18,11 +18,12 @@ class Render(Command):
     _examples_ = [
         ("tplx render templates/boot.cfg.j2 -s hostname=web01", "render one file"),
         ("tplx render boot.cfg -r templates -d host.json", "render a name from a root"),
+        ("tplx render web01.boot.cfg boot.cfg -r templates", "the first name found"),
     ]
 
-    name: str
-    "A template name looked up in the roots, or a file path when no --root is given"
-    ("name",)
+    names: _ty.List[str]
+    "Template names tried in order, the first found wins; one file path when no --root is given"
+    ("names",)
 
     data: _ty.Optional[str] = None
     "A JSON file holding an object of top-level names, or - for standard input"
@@ -37,8 +38,8 @@ class Render(Command):
     ("--output", "-o")
 
     def __call__(self) -> int:
-        lookup, name = self.resolve(self.name)
-        rendered = lookup.render(name, self.values())
+        lookup, names = self.resolve(self.names)
+        rendered = lookup.render(names, self.values())
         self.write(rendered)
         return 0
 

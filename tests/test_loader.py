@@ -235,3 +235,50 @@ def test_an_unknown_undefined_mode_is_refused():
 def test_a_template_renders_without_a_loader():
     assert JinjaTemplate("{{ x }}-{{ y }}").render({"x": 1}, y=2) == "1-2"
     assert CopyTemplate("as is").render() == b"as is"
+
+
+# -- several names -----------------------------------------------------------
+
+
+def test_a_list_of_names_takes_the_first_that_exists(tree):
+    tree.write("boot.cfg.j2", "generic")
+    loader = Loader([tree.root])
+    assert loader.render(["web01.boot.cfg", "boot.cfg"]) == "generic"
+    tree.write("web01.boot.cfg.j2", "web01")
+    assert Loader([tree.root]).render(["web01.boot.cfg", "boot.cfg"]) == "web01"
+
+
+def test_each_name_is_expanded_by_the_candidates_before_the_next(tree):
+    tree.write("host.b.j2", "host b")
+    tree.write("a.j2", "plain a")
+
+    def host(name):
+        return [f"host.{name}", name]
+
+    # `a` (as `host.a`, then `a`) is tried in full before `b`.
+    assert Loader([tree.root]).render(["a", "b"], candidates=host) == "plain a"
+
+
+def test_when_none_is_found_the_error_names_them_all(tree):
+    with pytest.raises(TemplateNotFound, match="'x', 'y'") as excinfo:
+        Loader([tree.root]).render(["x", "y"])
+    assert excinfo.value.names == ("x", "y") and excinfo.value.name == "x"
+
+
+def test_every_name_in_a_list_is_checked_for_escapes(tree):
+    tree.write("ok.j2", "ok")
+    with pytest.raises(TemplateNotFound, match="escapes"):
+        Loader([tree.root]).render(["ok", "../secret"])
+
+
+def test_a_list_and_a_name_are_cached_apart(tree):
+    tree.write("a.j2", "a")
+    tree.write("b.j2", "b")
+    lookup = Loader([tree.root]).lookup()
+    assert lookup.render("b") == "b"
+    assert lookup.render(["a", "b"]) == "a"
+
+
+def test_an_empty_list_is_refused():
+    with pytest.raises(ValueError, match="no template name"):
+        Loader([]).render([])

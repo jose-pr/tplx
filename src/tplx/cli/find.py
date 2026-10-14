@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import typing as _ty
 
 from ._common import Command
 
@@ -13,17 +14,17 @@ class Find(Command):
     _parsername_ = "find"
     _parseraliases_ = ["which"]
 
-    name: str
-    "A template name looked up in the roots, or a file path when no --root is given"
-    ("name",)
+    names: _ty.List[str]
+    "Template names tried in order, the first found wins; one file path when no --root is given"
+    ("names",)
 
     json_out: bool = False
     "Print a JSON object instead of tab-separated text"
     ("--json",)
 
     def __call__(self) -> int:
-        lookup, name = self.resolve(self.name)
-        source, engine = lookup.resolve(name)
+        lookup, names = self.resolve(self.names)
+        source, engine = lookup.resolve(names)
         if self.json_out:
             print(json.dumps({"origin": source.origin, "engine": engine.__name__}))
         else:

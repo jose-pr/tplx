@@ -32,6 +32,28 @@ DEFAULT_ROOT = "templates"
 #: `candidates(name)` returns the file names to try for `name`, in order.
 Candidates = Callable[[str], Iterable[str]]
 
+#: One template name, or several tried in order (the first found wins).
+Names = Union[str, Sequence[str]]
+
+
+def _names(name: "Names") -> List[str]:
+    """`name` as a list of names, each refused when it escapes the search paths."""
+    names = [name] if isinstance(name, str) else list(name)
+    if not names:
+        raise ValueError("no template name given")
+    for each in names:
+        if not isinstance(each, str):
+            raise TypeError(f"a template name is a str, not {type(each).__name__}")
+        if ".." in PurePosixPath(each.lstrip("/")).parts:
+            raise TemplateNotFound(
+                each, f"template name escapes the search paths: {each!r}"
+            )
+    return names
+
+
+def _key(name: "Names") -> Hashable:
+    return name if isinstance(name, str) else tuple(name)
+
 
 class Source(NamedTuple):
     """A template file as found: its bytes, where it came from, and a freshness check."""
@@ -150,17 +172,17 @@ class Loader:
             )
         return found
 
-    def find(self, name: str, **lookup: Any) -> Source:
+    def find(self, name: "Names", **lookup: Any) -> Source:
         """`self.lookup(**lookup).find(name)`."""
         return self.lookup(**lookup).find(name)
 
-    def get(self, name: str, **lookup: Any) -> Template:
+    def get(self, name: "Names", **lookup: Any) -> Template:
         """`self.lookup(**lookup).get(name)`."""
         return self.lookup(**lookup).get(name)
 
     def render(
         self,
-        name: str,
+        name: "Names",
         data: "Optional[Mapping[str, Any]]" = None,
         /,
         *,
@@ -194,7 +216,7 @@ class Lookup:
         self.loader = loader
         self.candidates = candidates
         self.paths = tuple(_as_path(path) for path in paths)
-        self._templates: Dict[str, Template] = {}
+        self._templates: Dict[Hashable, Template] = {}
         self._state: Dict[Hashable, Any] = {}
 
     def search_paths(self) -> list:
@@ -209,17 +231,23 @@ class Lookup:
         found.extend(roots)
         return found
 
-    def find(self, name: str) -> Source:
+    def find(self, name: "Names") -> Source:
         """Find the file for `name` and read its bytes.
 
-        :raises TemplateNotFound: nothing matches, or `name` has a `..` segment.
+        `name` may be a list of names: each is tried in turn, with all of its
+        candidates in every search path, and the first file found wins.
+
+        :raises TemplateNotFound: nothing matches, or a name has a `..` segment.
         """
-        relative = name.lstrip("/")
-        posix = PurePosixPath(relative)
-        if ".." in posix.parts:
-            raise TemplateNotFound(
-                name, f"template name escapes the search paths: {name!r}"
-            )
+        names = _names(name)
+        for each in names:
+            found = self._find_one(each)
+            if found is not None:
+                return found
+        raise TemplateNotFound(names[0] if len(names) == 1 else names)
+
+    def _find_one(self, name: str) -> "Optional[Source]":
+        posix = PurePosixPath(name.lstrip("/"))
         parent = posix.parent.as_posix() if posix.parent != PurePosixPath(".") else None
         filename = posix.name
         names: List[str] = (
@@ -245,7 +273,7 @@ class Lookup:
                         return False
 
                 return Source(data, path.name, _origin(path), uptodate)
-        raise TemplateNotFound(name)
+        return None
 
     @staticmethod
     def _match(directory, filename: str):
@@ -259,7 +287,7 @@ class Lookup:
         return best
 
     def _engine_for(
-        self, name: str, source: Source
+        self, name: "Names", source: Source
     ) -> "Tuple[type, Union[str, bytes]]":
         """The engine that claims `source`, and the body it is built from."""
         try:
@@ -288,7 +316,7 @@ class Lookup:
             f"engines: {claimed or 'none configured'}"
         )
 
-    def get(self, name: str) -> Template:
+    def get(self, name: "Names") -> Template:
         """The compiled template for `name`, from the cache while its file is unchanged.
 
         :raises TemplateNotFound: no file matches.
@@ -298,7 +326,7 @@ class Lookup:
             is missing.
         :raises RenderError: the engine could not compile it.
         """
-        cached = self._templates.get(name)
+        cached = self._templates.get(_key(name))
         if cached is not None and cached.is_up_to_date:
             return cached
         source = self.find(name)
@@ -312,10 +340,10 @@ class Lookup:
                 f"{cls.__name__} could not compile {source.origin}: {exc}"
             ) from exc
         template._uptodate = source.uptodate
-        self._templates[name] = template
+        self._templates[_key(name)] = template
         return template
 
-    def resolve(self, name: str) -> "Tuple[Source, type]":
+    def resolve(self, name: "Names") -> "Tuple[Source, type]":
         """The file a render of `name` reads and the engine that renders it.
 
         :raises TemplateNotFound: no file matches.
@@ -356,7 +384,7 @@ class Lookup:
 
     def render(
         self,
-        name: str,
+        name: "Names",
         data: "Optional[Mapping[str, Any]]" = None,
         /,
         **overrides: Any,

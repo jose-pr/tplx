@@ -42,7 +42,11 @@ Finds templates under `roots` and renders them with the engine each needs.
   `encoder`.
 
 **Resolution**: a name may hold directories (`debian/boot`); a `..` segment
-raises `TemplateNotFound`. In each directory an exact file name wins;
+raises `TemplateNotFound`. Wherever a name is taken (`render`, `get`, `find`,
+`resolve`), a **list of names** may be given instead: each is tried in turn,
+with all of its candidates in every search path, and the first file found
+wins (`render(["web01.boot.cfg", "boot.cfg"])`). An empty list is a
+`ValueError`. A `str` is always one name. In each directory an exact file name wins;
 otherwise the lowest-sorting file whose **stem** is the name (`boot.cfg`
 finds `boot.cfg.j2`). The first engine whose `can_process` accepts the file
 builds it, so **the suffix picks the engine**. Files are read as bytes; a text
@@ -291,8 +295,9 @@ data, bytes exactly when `BINARY`, knows its origin, outranks the fallback).
 All in `tplx.exceptions`, all re-exported from `tplx`.
 
 - `TplxError` — base of every error tplx raises.
-- `TemplateNotFound(TplxError, LookupError)` — `.name`; no file, or the name
-  escapes the search paths.
+- `TemplateNotFound(TplxError, LookupError)` — `.names` (every name tried,
+  in order) and `.name` (the first); no file, or a name escapes the search
+  paths.
 - `NoEngineError(TplxError)` — no engine claims the file, or it is not UTF-8
   for a text engine.
 - `EngineUnavailableError(TplxError)` — the engine's extra (`pip install
@@ -309,12 +314,13 @@ All in `tplx.exceptions`, all re-exported from `tplx`.
 exits naming the extra. `import tplx` never imports `tplx.cli`.
 
 ```text
-tplx render NAME [-r ROOT]... [-p PATH]... [-u MODE] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
-tplx find NAME [-r ROOT]... [-p PATH]... [--json]        (alias: which)
+tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
+tplx find NAME... [-r ROOT]... [-p PATH]... [--json]     (alias: which)
 tplx engines [--json]
 ```
 
-- `NAME` is looked up in the roots; with no `-r`, a `NAME` that is an existing
+- `NAME` is looked up in the roots; several names are tried in order and
+  the first found wins. With no `-r`, a single `NAME` that is an existing
   file is that file, its directory the root.
 - `-r/--root` (repeat; default `templates`), `-p/--path` (repeat; searched
   first, relative ones inside each root), `-u/--undefined` (`strict`,

@@ -1,5 +1,7 @@
 """The errors tplx raises. Every one derives from `TplxError`."""
 
+from typing import Sequence
+
 __all__ = [
     "TplxError",
     "TemplateNotFound",
@@ -16,11 +18,23 @@ class TplxError(Exception):
 
 
 class TemplateNotFound(TplxError, LookupError):
-    """No search path holds a file for the name, or the name escapes them."""
+    """No search path holds a file for the name, or the name escapes them.
 
-    def __init__(self, name: str, message: "str | None" = None) -> None:
-        self.name = name
-        super().__init__(message or f"template not found: {name!r}")
+    `names` holds every name tried, in order; `name` is the first.
+    """
+
+    def __init__(
+        self, name: "str | Sequence[str]", message: "str | None" = None
+    ) -> None:
+        self.names = (name,) if isinstance(name, str) else tuple(name)
+        self.name = self.names[0]
+        if message is None:
+            if len(self.names) == 1:
+                message = f"template not found: {self.name!r}"
+            else:
+                tried = ", ".join(repr(each) for each in self.names)
+                message = f"none of these templates was found: {tried}"
+        super().__init__(message)
 
 
 class NoEngineError(TplxError):

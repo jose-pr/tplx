@@ -28,18 +28,23 @@ class Command(LoggingArgs, Cmd):
     "What a name the data does not define renders as"
     ("--undefined", "-u")
 
-    def resolve(self, name: str) -> "_ty.Tuple[Lookup, str]":
-        """The lookup to use and the name to ask it for.
+    def resolve(self, names: "_ty.Sequence[str]") -> "_ty.Tuple[Lookup, _ty.List[str]]":
+        """The lookup to use and the names to ask it for, in order.
 
-        With no `--root`, a `name` that is an existing file is that file: its
-        directory is the root and its file name the name.
+        With no `--root`, a single name that is an existing file is that file:
+        its directory is the root and its file name the name.
+
+        :raises UsageError: no name was given.
         """
+        names = list(names)
+        if not names:
+            raise UsageError("give at least one template name")
         roots = list(self.roots)
-        if not roots and os.path.isfile(name):
-            directory, name = os.path.split(os.path.abspath(name))
-            roots = [directory]
+        if not roots and len(names) == 1 and os.path.isfile(names[0]):
+            directory, name = os.path.split(os.path.abspath(names[0]))
+            roots, names = [directory], [name]
         loader = Loader(roots, undefined=self.undefined)
-        return loader.lookup(paths=self.paths), name
+        return loader.lookup(paths=self.paths), names
 
 
 def merge(base: "_ty.Dict[str, _ty.Any]", over: "_ty.Mapping[str, _ty.Any]") -> dict:

@@ -110,3 +110,17 @@ def test_importing_tplx_does_not_import_the_command_line():
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == "False False"
+
+
+def test_several_names_take_the_first_found(project, capsys):
+    project.write("web01.net.shtpl", "web01 %{TARGET_IP}\n")
+    args = ["render", "nope", "web01.net", "net", "-s", "target.ip=1"]
+    assert main(args) == 0
+    assert capsys.readouterr().out == "web01 1\n"
+    assert main(["find", "nope", "net"]) == 0
+    assert capsys.readouterr().out.strip().endswith("net.shtpl\tShellTemplate")
+
+
+def test_no_name_is_a_usage_error(project, capsys):
+    assert main(["render"]) == 2
+    assert "template name" in capsys.readouterr().err
