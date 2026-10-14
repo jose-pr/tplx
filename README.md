@@ -75,6 +75,7 @@ text = lookup.render("boot.cfg", hostname="web01")
 pip install "tplx[cli,jinja]"
 tplx render templates/boot.cfg.j2 -s hostname=web01      # one file
 tplx render boot.cfg -r templates -d host.json -o boot.cfg  # a name, data from JSON
+tplx render web01.boot.cfg boot.cfg -r templates         # the first name found
 tplx find boot.cfg -r templates                          # which file, which engine
 tplx engines                                             # what is registered
 ```
