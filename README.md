@@ -83,6 +83,19 @@ lookup = loader.lookup(
 text = lookup.render("boot.cfg", hostname="web01")
 ```
 
+Filters, helpers and options go to each engine's own environment:
+
+```python
+import shlex
+
+from tplx import JinjaTemplate, Loader
+
+loader = Loader(
+    ["templates"],
+    configure={JinjaTemplate: lambda env: env.filters.update(quote=shlex.quote)},
+)
+```
+
 ## Command line
 
 ```bash

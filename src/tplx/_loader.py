@@ -188,6 +188,9 @@ class Loader:
     `undefined` is one of `UNDEFINED_MODES`. `globals` are names every render
     sees, under the data passed to `render`. `encoder` presents the data to
     the engines that cannot evaluate Python (a `DataEncoder` by default).
+    `configure` maps an engine class to a function called once with that
+    engine's own environment whenever a lookup builds one, for the class and
+    its subclasses: `{JinjaTemplate: lambda env: env.filters.update(q=quote)}`.
     """
 
     def __init__(
@@ -198,6 +201,7 @@ class Loader:
         undefined: str = "strict",
         globals: "Optional[Mapping[str, Any]]" = None,
         encoder: "Optional[DataEncoder]" = None,
+        configure: "Optional[Mapping[type, Callable[[Any], Any]]]" = None,
     ) -> None:
         if undefined not in UNDEFINED_MODES:
             raise ValueError(
@@ -211,6 +215,13 @@ class Loader:
         self.undefined = undefined
         self.globals: dict = dict(globals or {})
         self.encoder = encoder if encoder is not None else DataEncoder()
+        self.configure: "Dict[type, Callable[[Any], Any]]" = dict(configure or {})
+        for cls, function in self.configure.items():
+            if not isinstance(cls, type) or not callable(function):
+                raise TypeError(
+                    "configure maps an engine class to a callable, "
+                    f"not {cls!r} to {function!r}"
+                )
         self._lookups: "OrderedDict[Hashable, Lookup]" = OrderedDict()
 
     def lookup(

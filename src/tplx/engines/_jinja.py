@@ -96,7 +96,7 @@ class JinjaTemplate(Template):
         key = ("jinja", type(self), mode)
 
         def factory():
-            return _environment(jinja2, lookup, type(self), mode)
+            return self.configure_native(_environment(jinja2, lookup, type(self), mode))
 
         environment = lookup.state(key, factory) if lookup is not None else factory()
         code = environment.compile(source, name=origin, filename=origin)

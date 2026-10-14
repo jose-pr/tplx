@@ -87,6 +87,19 @@ class Template:
             return self.lookup.loader.encoder
         return _DEFAULT_ENCODER
 
+    def configure_native(self, native: Any) -> Any:
+        """Apply the loader's `configure` functions for this engine to `native`.
+
+        An engine calls it once, where it builds its own environment for a
+        lookup; every function whose key is this engine's class or a base of it
+        runs, in the order given. Returns `native`.
+        """
+        if self.lookup is not None:
+            for cls, function in self.lookup.loader.configure.items():
+                if isinstance(self, cls):
+                    function(native)
+        return native
+
     @property
     def is_up_to_date(self) -> bool:
         """Is the file this was loaded from unchanged? True when there is no file."""

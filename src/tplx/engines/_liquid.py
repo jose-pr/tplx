@@ -95,7 +95,9 @@ class LiquidTemplate(Template):
         key = ("liquid", type(self), mode)
 
         def factory():
-            return _environment(liquid, TemplateSource, lookup, type(self), mode)
+            return self.configure_native(
+                _environment(liquid, TemplateSource, lookup, type(self), mode)
+            )
 
         environment = lookup.state(key, factory) if lookup is not None else factory()
         self._template = environment.from_string(source, name=origin)

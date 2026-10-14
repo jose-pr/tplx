@@ -27,7 +27,7 @@ a drive) is refused.
 ## Loading and rendering (`tplx`)
 
 ```python
-Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None)
+Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None, configure=None)
 ```
 
 Finds templates under `roots` and renders them with the engine each needs.
@@ -46,8 +46,12 @@ order) and `Candidates = Callable[[str], Iterable[str]]`.
 - `globals`: names every render sees, beneath the data passed to `render`.
 - `encoder`: the `DataEncoder` that presents the data to the engines that
   cannot evaluate Python; default `DataEncoder()`.
+- `configure`: `{EngineClass: function}`; each function is called once with
+  that engine's own environment when a lookup builds it, for the class and its
+  subclasses (see "Configuring an engine"). Anything but a class mapped to a
+  callable raises `TypeError`.
 - Attributes: `roots`, `engines` (tuple), `undefined`, `globals` (dict),
-  `encoder`.
+  `encoder`, `configure` (dict).
 
 **Resolution**: a name may hold directories (`debian/boot`), separated by
 `/`. A name with a `..` segment, a backslash, a NUL or a drive (`C:/x`,
@@ -270,6 +274,24 @@ rule. Names are root-relative, never relative to the including file.
 
 An optional engine is registered whether or not its library is installed, and
 `import tplx` imports none of them.
+
+### Configuring an engine
+
+`Loader(configure={EngineClass: function})` hands each engine's own
+environment to `function` once per lookup, before any template is compiled,
+so filters, helpers and options reach every template and include:
+
+| Engine | `function` receives | For example |
+| --- | --- | --- |
+| `JinjaTemplate` | `jinja2.Environment` | `env.filters["quote"] = shlex.quote` |
+| `LiquidTemplate` | `liquid.Environment` | `env.filters["quote"] = shlex.quote` |
+| `MakoTemplate` | `mako.lookup.TemplateLookup` | `lookup.template_args["imports"] = ["from shlex import quote"]` |
+| `HandlebarsTemplate` | the `dict` of helpers every render passes | `helpers["quote"] = lambda this, v: shlex.quote(v)` |
+
+Mustache, the shell engine, ERB, EPP and copy have no environment; an entry
+for them is never called. A key matches its subclasses, and several matching
+keys run in the order given. `Template.configure_native(native)` is what an
+engine (a plugin's too) calls to apply them.
 
 ## The engine contract (`tplx`)
 

@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `DataEncoder`, the loader's `encoder=`: how data reaches Liquid,
   Handlebars, Mustache (`view`), ERB and EPP (`json`) and the shell engine
   (`flatten`); a subclass overrides `default`, `key` and `text`.
+- `Loader(configure={EngineClass: function})`: Jinja and Liquid environments,
+  the mako `TemplateLookup` and the Handlebars helpers, set up once per lookup.
 - The `tplx` command (`cli` extra): `tplx render`, `tplx find`,
   `tplx engines`.
 - `TplxError` and its subclasses in `tplx.exceptions`; the `TPLX_RUBY` and

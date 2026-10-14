@@ -92,7 +92,7 @@ def _template_lookup(TemplateLookup, MakoTemplate, lookup, engine: type, strict:
                 # Another engine's file: a stub that renders it with this
                 # template's data.
                 text = "${%s(context, %r)}" % (INCLUDE_NAME, uri)
-            compiled = MakoTemplate(text, lookup=self, uri=uri, strict_undefined=strict)
+            compiled = MakoTemplate(text, lookup=self, uri=uri, **self.template_args)
             self._collection[uri] = (compiled, found.source.uptodate)
             return compiled
 
@@ -128,11 +128,15 @@ class MakoTemplate(Template):
         key = ("mako", type(self), strict)
 
         def factory():
-            return _template_lookup(TemplateLookup, Mako, lookup, type(self), strict)
+            return self.configure_native(
+                _template_lookup(TemplateLookup, Mako, lookup, type(self), strict)
+            )
 
         mako_lookup = lookup.state(key, factory) if lookup is not None else factory()
+        # The lookup's template_args (strict_undefined, and whatever `configure`
+        # set, such as imports or default_filters) build every template.
         self._template = Mako(
-            source, lookup=mako_lookup, uri=origin, strict_undefined=strict
+            source, lookup=mako_lookup, uri=origin, **mako_lookup.template_args
         )
 
     def _namespace(self, data: "Mapping[str, Any]") -> dict:

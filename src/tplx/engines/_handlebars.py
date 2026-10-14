@@ -78,4 +78,17 @@ class HandlebarsTemplate(Template):
             missing=lambda *args, **kwargs: [],
         )
         # pybars returns a list of fragments, not a string.
-        return "".join(self._template(self.encoder.view(values), partials=partials))
+        helpers = (
+            lookup.state(("handlebars-helpers", type(self)), self._helpers)
+            if lookup
+            else {}
+        )
+        return "".join(
+            self._template(
+                self.encoder.view(values), helpers=helpers, partials=partials
+            )
+        )
+
+    def _helpers(self) -> dict:
+        """The helpers every render of this lookup passes, as `configure` sets them."""
+        return self.configure_native({})
