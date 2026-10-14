@@ -162,3 +162,51 @@ def test_the_shell_engine_uses_the_loaders_encoder(tree):
     tree.write("t.shtpl", "%{FLAG}")
     assert loader.render("t.shtpl", flag=True) == "yes"
     assert ShellTemplate("%{FLAG}").render(flag=True) == "true"
+
+
+# -- edges ----------------------------------------------------------------------
+
+
+class Node:
+    def __init__(self, name):
+        self.name = name
+        self.peer = None
+
+
+def test_keys_that_are_not_text_are_kept_and_named_by_their_text():
+    data = {"vlans": {10: "mgmt", 20: "data"}}
+    assert ENCODER.json(data) == {"vlans": {"10": "mgmt", "20": "data"}}
+    assert ENCODER.flatten(data) == {"VLANS_10": "mgmt", "VLANS_20": "data"}
+
+
+def test_flatten_writes_the_text_of_a_structure_at_max_depth_as_json_does():
+    shallow = DataEncoder(max_depth=1)
+    assert shallow.json({"a": {"b": 1}}) == {"a": "{'b': 1}"}
+    assert shallow.flatten({"a": {"b": 1}}) == {"A": "{'b': 1}"}
+    assert shallow.flatten({"a": 1}) == {"A": "1"}
+
+
+def test_a_cycle_through_objects_is_cut_at_the_back_reference():
+    a, b = Node("a"), Node("b")
+    a.peer, b.peer = b, a
+    assert ENCODER.json({"n": a}) == {"n": {"name": "a", "peer": {"name": "b"}}}
+    assert ENCODER.flatten({"n": a}) == {"N_NAME": "a", "N_PEER_NAME": "b"}
+
+
+def test_json_drops_a_reference_back_to_a_mapping_on_the_path():
+    loop = {"name": "x"}
+    loop["self"] = loop
+    assert ENCODER.json({"c": loop}) == {"c": {"name": "x"}}
+
+
+def test_a_view_refuses_dunder_names_by_item_as_by_attribute():
+    view = ENCODER.wrap(Node("n"))
+    with pytest.raises(KeyError):
+        view["__class__"]
+    assert dict(ENCODER.wrap({"__k__": 1})) == {"__k__": 1}  # a mapping's own key
+
+
+def test_json_writes_a_non_finite_number_as_text():
+    document = ENCODER.json({"a": float("nan"), "b": float("inf")})
+    assert document == {"a": "nan", "b": "inf"}
+    json.dumps(document, allow_nan=False)

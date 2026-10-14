@@ -156,13 +156,14 @@ DataEncoder(*, expose=(), max_depth=8)
   becomes a `DataView` (a lazy, read-only `Mapping` of its items or
   attributes; dunder names hidden), a list stays a list, a value as it is.
 - `json(values)` — for ERB, EPP: a JSON-serialisable copy; a value that is not
-  a JSON scalar is written as its `str()`.
+  a JSON scalar (a NaN or an infinity included) is written as its `str()`.
 - `flatten(values) -> dict[str, str]` — for the shell engine: one level,
   keyed by `key(path)`, each value through `text(value)`. List items are
   keyed by index. Two paths giving one key log a warning; the later wins.
 - `json` and `flatten` drop `_`-prefixed names unless `expose` lists them
-  (`view` keeps them), stop at `max_depth` (writing the value's text), and
-  skip a reference back to an object already on the path.
+  (`view` keeps them), name a key that is not a `str` by its text (`10` is
+  `"10"`), stop at `max_depth` (a structure that deep is written as its
+  text), and skip a reference back to an object already on the path.
 
 The hooks to override:
 

@@ -10,6 +10,7 @@ changes how, the way a `json.JSONEncoder` subclass does.
 from __future__ import annotations
 
 import logging
+import math
 import os
 from collections.abc import Mapping
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
@@ -41,6 +42,8 @@ class DataView(Mapping):
         obj = object.__getattribute__(self, "_obj")
         if isinstance(obj, Mapping):
             return obj[key]
+        if not isinstance(key, str) or key.startswith("__"):
+            raise KeyError(key)
         try:
             return getattr(obj, key)
         except AttributeError as exc:
@@ -74,12 +77,24 @@ class DataView(Mapping):
         return f"DataView({object.__getattribute__(self, '_obj')!r})"
 
 
+#: What `DataEncoder._json` returns for a reference back to an object on the
+#: path; the item that holds it is dropped.
+_SKIP = object()
+
+
 def unwrap(value: Any) -> Any:
     """The object a `DataView` stands for; lists are unwrapped item by item."""
     if isinstance(value, DataView):
         return object.__getattribute__(value, "_obj")
     if isinstance(value, list):
         return [unwrap(item) for item in value]
+    return value
+
+
+def _json_scalar(value: Any) -> Any:
+    """A JSON scalar as it is, except a NaN or infinity, which JSON cannot hold: its text."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
     return value
 
 
@@ -178,13 +193,17 @@ class DataEncoder:
         return {str(key): self.wrap(value) for key, value in values.items()}
 
     def _items(self, mapping: "Mapping[Any, Any]") -> Iterator[Tuple[str, Any]]:
-        """`mapping`'s items, without the `_`-prefixed names `expose` does not list."""
+        """`mapping`'s items by name, without the `_`-prefixed names `expose` does not list.
+
+        A key that is not a `str` (an `int`, say) is named by its text and read
+        by itself.
+        """
         for key in mapping:
-            key = str(key)
-            if key.startswith("_") and key not in self.expose:
+            name = str(key)
+            if name.startswith("_") and name not in self.expose:
                 continue
             try:
-                yield key, mapping[key]
+                yield name, mapping[key]
             except Exception:  # a property that raises is no data
                 continue
 
@@ -193,21 +212,25 @@ class DataEncoder:
         return self._json(values, 0, frozenset())
 
     def _json(self, value: Any, depth: int, seen: "frozenset[int]") -> Any:
+        value = unwrap(value) if isinstance(value, DataView) else value
         if isinstance(value, (str, bool, int, float, type(None))):
-            return value
-        if depth >= self.max_depth or id(value) in seen:
+            return _json_scalar(value)
+        if id(value) in seen:
+            return _SKIP
+        found = self.structure(value)
+        if isinstance(found, (Mapping, list)) and depth >= self.max_depth:
             return str(value)
-        found = self.structure(unwrap(value) if isinstance(value, DataView) else value)
         inner = seen | {id(value)}
         if isinstance(found, Mapping):
-            return {
-                key: self._json(item, depth + 1, inner)
-                for key, item in self._items(found)
-            }
+            pairs = (
+                (k, self._json(v, depth + 1, inner)) for k, v in self._items(found)
+            )
+            return {key: item for key, item in pairs if item is not _SKIP}
         if isinstance(found, list):
-            return [self._json(item, depth + 1, inner) for item in found]
+            items = (self._json(item, depth + 1, inner) for item in found)
+            return [item for item in items if item is not _SKIP]
         if isinstance(found, (str, bool, int, float, type(None))):
-            return found
+            return _json_scalar(found)
         return str(found)
 
     def flatten(self, values: "Mapping[str, Any]") -> Dict[str, str]:
@@ -228,9 +251,14 @@ class DataEncoder:
         depth: int,
         seen: "frozenset[int]",
     ) -> None:
-        if depth > self.max_depth or id(value) in seen:
+        value = unwrap(value) if isinstance(value, DataView) else value
+        if id(value) in seen:
             return
-        found = self.structure(unwrap(value) if isinstance(value, DataView) else value)
+        found = self.structure(value)
+        if isinstance(found, (Mapping, list)) and depth >= self.max_depth:
+            if path:
+                self._put(result, self.key(path), self.text(value))
+            return
         if isinstance(found, Mapping):
             items: Iterable[Tuple[str, Any]] = self._items(found)
         elif isinstance(found, list):
