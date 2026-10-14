@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Iterable, Optional, Tuple
+from typing import Any, Callable, Iterable, Optional, Tuple, TypeVar, overload
 
 LOGGER = logging.getLogger("tplx")
 
@@ -62,7 +62,22 @@ def _conflict(cls, priority: int, other) -> bool:
     return bool(set(mine) & set(theirs))
 
 
-def register_engine(cls=None, *, priority: Optional[int] = None):
+_Engine = TypeVar("_Engine", bound=type)
+
+
+@overload
+def register_engine(cls: _Engine, *, priority: Optional[int] = None) -> _Engine: ...
+
+
+@overload
+def register_engine(
+    cls: None = None, *, priority: Optional[int] = None
+) -> Callable[[_Engine], _Engine]: ...
+
+
+def register_engine(
+    cls: "Optional[_Engine]" = None, *, priority: Optional[int] = None
+) -> Any:
     """Add an engine to the registry and return it; usable as a decorator.
 
     `priority` overrides the class's `PRIORITY`. Registering a class that is

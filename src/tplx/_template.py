@@ -16,11 +16,16 @@ from typing import (
 
 from ._encoder import DataEncoder
 from ._registry import DEFAULT_PRIORITY, template_extensions
+from .exceptions import RenderError, TplxError
 
 _DEFAULT_ENCODER = DataEncoder()
 
 if TYPE_CHECKING:
     from ._loader import Lookup
+else:
+    # `_loader` imports this module, so it sets `Lookup` here once it defines
+    # it; the hints in this module then resolve at run time.
+    Lookup = None
 
 #: How a template variable with no value renders: `strict` raises
 #: `UndefinedError`, `lenient` renders an empty string, `debug` leaves the
@@ -29,7 +34,7 @@ if TYPE_CHECKING:
 UNDEFINED_MODES = ("strict", "lenient", "debug")
 
 
-def can_process_suffix(cls, file) -> bool:
+def can_process_suffix(cls: type, file: Any) -> bool:
     """Is `file`'s suffix one `cls.EXT` claims? `file` is a path or a file name."""
     suffixes = template_extensions(cls)
     if suffixes is None:
@@ -93,17 +98,25 @@ class Template:
     ) -> "Union[str, bytes]":
         """Render with `data`, then `overrides`, as the template's top-level names.
 
-        A keyword wins over the same name in `data`.
+        A keyword wins over the same name in `data`. An engine's own exception
+        is raised as `RenderError`, with it as the `__cause__`.
         """
         values = dict(data or {})
         values.update(overrides)
-        return self.render_values(values)
+        try:
+            return self.render_values(values)
+        except TplxError:
+            raise
+        except Exception as exc:
+            raise RenderError(
+                f"{type(self).__name__} failed to render {self.origin}: {exc}"
+            ) from exc
 
     def render_values(self, values: "Mapping[str, Any]") -> "Union[str, bytes]":
         """What an engine implements: render with `values` as the top-level names."""
         raise NotImplementedError
 
     @classmethod
-    def can_process(cls, file, source: "Union[str, bytes]") -> bool:
+    def can_process(cls, file: Any, source: "Union[str, bytes]") -> bool:
         """Does this engine render `file`? By default, when it claims the suffix."""
         return can_process_suffix(cls, file)

@@ -95,3 +95,17 @@ class TestEPP(EngineContract):
     engine = tplx.EPPTemplate
     source = "<%= $name %>"
     expected = "tplx"
+
+
+def test_every_shipped_engine_has_a_contract_test():
+    tested = {
+        each.engine
+        for each in list(globals().values())
+        if isinstance(each, type)
+        and issubclass(each, EngineContract)
+        and hasattr(each, "engine")
+    }
+    shipped = {
+        cls for cls in tplx.registered_engines() if cls.__module__.startswith("tplx.")
+    }
+    assert shipped <= tested

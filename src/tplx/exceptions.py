@@ -1,6 +1,8 @@
 """The errors tplx raises. Every one derives from `TplxError`."""
 
-from typing import Sequence
+from __future__ import annotations
+
+from typing import Optional, Sequence, Union
 
 __all__ = [
     "TplxError",
@@ -24,7 +26,7 @@ class TemplateNotFound(TplxError, LookupError):
     """
 
     def __init__(
-        self, name: "str | Sequence[str]", message: "str | None" = None
+        self, name: "Union[str, Sequence[str]]", message: "Optional[str]" = None
     ) -> None:
         self.names = (name,) if isinstance(name, str) else tuple(name)
         self.name = self.names[0]

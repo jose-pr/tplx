@@ -6,6 +6,8 @@ rather than being copied as bytes because nothing claimed it. Importing this
 package imports no engine library.
 """
 
+from __future__ import annotations
+
 from .._registry import register_engine
 from ._copy import CopyTemplate
 from ._external import EPPTemplate, ERBTemplate, SubprocessTemplate

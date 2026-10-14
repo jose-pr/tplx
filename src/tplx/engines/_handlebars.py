@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
+from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError
 from ._partials import Partials
@@ -39,7 +40,13 @@ class HandlebarsTemplate(Template):
 
     EXT = (".hbs", ".handlebars")
 
-    def __init__(self, source: str, *, lookup=None, origin: str = "<string>") -> None:
+    def __init__(
+        self,
+        source: str,
+        *,
+        lookup: "Optional[Lookup]" = None,
+        origin: str = "<string>",
+    ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
         self._compiler = _pybars()()
         self._template = self._compiler.compile(source)

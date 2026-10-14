@@ -7,6 +7,8 @@ import typing as _ty
 
 from ._common import Command
 
+__all__ = ["Find"]
+
 
 class Find(Command):
     """Show the file a template name resolves to and the engine that renders it."""

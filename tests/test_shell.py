@@ -4,7 +4,7 @@ from argparse import Namespace
 
 import pytest
 
-from tplx import JinjaTemplate, Loader, ShellTemplate, UndefinedError
+from tplx import JinjaTemplate, Loader, RenderError, ShellTemplate, UndefinedError
 
 
 def render(source, mode="strict", cls=ShellTemplate, **data):
@@ -104,8 +104,9 @@ def test_an_unknown_pattern_names_the_accepted_words():
     class Broken(ShellTemplate):
         PATTERN = "curly"
 
-    with pytest.raises(ValueError, match="braced, unbraced, all"):
+    with pytest.raises(RenderError, match="braced, unbraced, all") as excinfo:
         render("x", cls=Broken)
+    assert isinstance(excinfo.value.__cause__, ValueError)
 
 
 def test_a_subclass_does_not_reuse_its_parents_pattern():

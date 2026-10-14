@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 from typing import Any, ClassVar, Dict, List, Mapping, Optional
 
+from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, RenderError, RenderTimeoutError
 
@@ -119,7 +120,13 @@ class SubprocessTemplate(Template):
     #: a newline the template did not write.
     SENTINEL: ClassVar[Optional[str]] = None
 
-    def __init__(self, source: str, *, lookup=None, origin: str = "<string>") -> None:
+    def __init__(
+        self,
+        source: str,
+        *,
+        lookup: "Optional[Lookup]" = None,
+        origin: str = "<string>",
+    ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
         # Fail while loading, where the file that needs the program is named.
         self.executable()

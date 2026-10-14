@@ -1,10 +1,21 @@
 """tplx: render a tree of templates with whichever engine each file's suffix names."""
 
+from __future__ import annotations
+
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 
 from ._encoder import DataEncoder, DataView
-from ._loader import DEFAULT_ROOT, LOOKUP_CACHE_SIZE, Include, Loader, Lookup, Source
+from ._loader import (
+    DEFAULT_ROOT,
+    LOOKUP_CACHE_SIZE,
+    Candidates,
+    Include,
+    Loader,
+    Lookup,
+    Names,
+    Source,
+)
 from ._registry import (
     ANY_SUFFIX,
     DEFAULT_PRIORITY,
@@ -53,6 +64,8 @@ __all__ = [
     "Include",
     "DEFAULT_ROOT",
     "LOOKUP_CACHE_SIZE",
+    "Names",
+    "Candidates",
     "DataEncoder",
     "DataView",
     # the engine contract and registry

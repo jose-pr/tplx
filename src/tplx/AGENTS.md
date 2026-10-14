@@ -25,6 +25,8 @@ Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None
 ```
 
 Finds templates under `roots` and renders them with the engine each needs.
+Type aliases: `Names = str | Sequence[str]` (one name, or several tried in
+order) and `Candidates = Callable[[str], Iterable[str]]`.
 
 - `roots`: directories searched in order. A `str` or `os.PathLike` is a local
   `pathlib.Path`; any object with pathlib's `/`, `exists`, `iterdir`,
@@ -278,8 +280,9 @@ class Template:
 ```
 
 - An engine implements `render_values`; `render` merges `data` and
-  `overrides` and calls it. A template built without a `lookup` renders
-  `strict` and has no includes.
+  `overrides`, calls it, and raises an engine's own exception as `RenderError`
+  (its `__cause__`). A template built without a `lookup` renders `strict` and
+  has no includes.
 - Attributes: `source`, `lookup`, `origin`, `undefined` (the mode),
   `is_up_to_date`.
 - `can_process` defaults to `can_process_suffix(cls, file)`: is `file`'s
@@ -371,8 +374,9 @@ tplx engines [--json]
 
 ## Gotchas
 
-- `Template.render` on its own does not wrap an engine's exception in
-  `RenderError`; `Lookup.render` does.
+- Building an engine class directly (`JinjaTemplate("{% if %}")`) raises the
+  engine library's own compile error; `Lookup.get` raises it as
+  `RenderError`. Rendering raises `RenderError` either way.
 - A `str` root is always local: pass a path object for a URI.
 - A compiled template is reused while **its own** file is unchanged; adding a
   file that would now win (an earlier candidate, an exact name) takes effect

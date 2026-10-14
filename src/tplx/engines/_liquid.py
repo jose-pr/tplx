@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from contextvars import ContextVar
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
+from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
 
@@ -80,7 +81,13 @@ class LiquidTemplate(Template):
 
     EXT = (".liquid",)
 
-    def __init__(self, source: str, *, lookup=None, origin: str = "<string>") -> None:
+    def __init__(
+        self,
+        source: str,
+        *,
+        lookup: "Optional[Lookup]" = None,
+        origin: str = "<string>",
+    ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
         liquid, TemplateSource = _liquid()
         self._liquid = liquid

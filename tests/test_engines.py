@@ -204,3 +204,10 @@ def test_liquid_templates_see_only_the_encoded_data(tree):
     pytest.importorskip("liquid")
     tree.write("v.liquid", "[{{ __tplx_values__ }}]")
     assert Loader([tree.root], undefined="lenient").render("v.liquid", x=1) == "[]"
+
+
+def test_a_template_built_directly_raises_an_engine_failure_as_render_error():
+    pytest.importorskip("mako")
+    with pytest.raises(tplx.RenderError) as excinfo:
+        MakoTemplate("${x.y}").render(x=1)
+    assert isinstance(excinfo.value.__cause__, AttributeError)

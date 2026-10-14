@@ -10,6 +10,8 @@ from duho import UsageError
 
 from ._common import Command, merge, parse_assignments
 
+__all__ = ["Render"]
+
 
 class Render(Command):
     """Render a template with the data given, to standard output or a file."""

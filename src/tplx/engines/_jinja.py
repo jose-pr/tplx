@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import Any, Mapping, Optional
 
+from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
-
-if TYPE_CHECKING:
-    from .._loader import Lookup
 
 #: The global a stub calls to render another engine's file.
 INCLUDE_NAME = "__tplx_include__"
@@ -85,7 +83,13 @@ class JinjaTemplate(Template):
 
     EXT = (".j2", ".jinja", ".jinja2")
 
-    def __init__(self, source: str, *, lookup=None, origin: str = "<string>") -> None:
+    def __init__(
+        self,
+        source: str,
+        *,
+        lookup: "Optional[Lookup]" = None,
+        origin: str = "<string>",
+    ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
         jinja2 = self._jinja2 = _jinja2()
         mode = self.undefined

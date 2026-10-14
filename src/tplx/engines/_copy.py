@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional, Union
 
 from .._registry import FALLBACK_PRIORITY, template_extensions
+from .._loader import Lookup
 from .._template import Template
 from ._shell import ShellTemplate
 
@@ -42,7 +43,11 @@ class CopyTemplate(Template):
     BINARY = True
 
     def __init__(
-        self, source: "bytes | str", *, lookup=None, origin: str = "<string>"
+        self,
+        source: "Union[bytes, str]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+        origin: str = "<string>",
     ) -> None:
         if not isinstance(source, bytes):
             source = str(source).encode("utf-8")

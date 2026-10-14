@@ -22,6 +22,7 @@ from typing import (
 )
 
 from . import _registry
+from . import _template
 from ._registry import FALLBACK_PRIORITY, by_priority, template_extensions
 from ._encoder import DataEncoder, unwrap
 from ._template import UNDEFINED_MODES, Template, can_process_suffix
@@ -493,3 +494,6 @@ class Lookup:
         except KeyError:
             value = self._state[key] = factory()
             return value
+
+
+_template.Lookup = Lookup

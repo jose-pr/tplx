@@ -8,6 +8,8 @@ from duho import Cmd
 
 from .._registry import registered_engines, template_extensions
 
+__all__ = ["Engines"]
+
 
 class Engines(Cmd):
     """List the registered engines, highest priority first, with their suffixes."""
