@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-15
+
 ### Added
 
 - `Loader` and `Lookup`: find a template by name (an exact file name, or the
@@ -39,4 +41,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TplxError` and its subclasses in `tplx.exceptions`; the `TPLX_RUBY` and
   `TPLX_PUPPET` environment variables.
 
-[Unreleased]: https://github.com/jose-pr/tplx/commits/main
+[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jose-pr/tplx/releases/tag/v0.1.0
