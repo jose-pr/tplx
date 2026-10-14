@@ -36,6 +36,7 @@ def project(tmp_path, monkeypatch):
     (templates / "boot.cfg.j2").write_text(
         "host {{ hostname | default('any') }} {{ release | default('') }}\n"
     )
+    (templates / "nginx.conf.template").write_text("server_name $HOSTNAME; $uri\n")
     (tmp_path / "host.json").write_text(json.dumps({"hostname": "web01"}))
     monkeypatch.chdir(tmp_path)
     return tmp_path

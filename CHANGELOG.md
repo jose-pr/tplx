@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `EnvsubstTemplate` (`.envsubst`, `.template`): `$NAME` and `${NAME}` as
+  envsubst writes them. `DIALECT` is `gnu` (the default: no defaults, no `$$`
+  escape), `a8m` or `drone`; `PATTERN` and `FEATURES` override a dialect's.
+- The shell engine slices (`%{NAME:1:3}`, `%{NAME: -2}`) and replaces
+  (`%{NAME/pattern/text}`, `//`, `/#`, `/%`) as bash does; `FEATURES` turns
+  each piece of syntax on or off.
+- `tplx render --env` starts the data from the environment variables.
+
+### Changed
+
+- A `.envsubst` or `.template` file is rendered by the envsubst engine; 0.1.0
+  copied it byte for byte.
+- The shell engine leaves an expression it does not know as text and goes on
+  scanning inside it, so a placeholder there is still substituted.
+
 ## [0.1.0] - 2026-10-15
 
 ### Added

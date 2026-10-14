@@ -58,6 +58,12 @@ class TestShell(EngineContract):
     expected = "tplx"
 
 
+class TestEnvsubst(EngineContract):
+    engine = tplx.EnvsubstTemplate
+    source = "${NAME}"
+    expected = "tplx"
+
+
 class TestCopy(EngineContract):
     engine = tplx.CopyTemplate
     source = b"as is"

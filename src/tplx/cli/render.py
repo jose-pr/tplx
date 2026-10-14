@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import typing as _ty
 
@@ -21,6 +22,10 @@ class Render(Command):
         ("tplx render templates/boot.cfg.j2 -s hostname=web01", "render one file"),
         ("tplx render boot.cfg -r templates -d host.json", "render a name from a root"),
         ("tplx render web01.boot.cfg boot.cfg -r templates", "the first name found"),
+        (
+            "tplx render nginx.conf -r templates --env -u debug",
+            "envsubst from the environment",
+        ),
     ]
 
     names: _ty.List[str]
@@ -35,6 +40,10 @@ class Render(Command):
     "A key=value name, over --data; a.b=v nests, v of json:... is JSON; repeat for more"
     ("--set", "-s")
 
+    environment: bool = False
+    "Start the data from the environment variables, beneath --data and --set"
+    ("--env",)
+
     output: str = "-"
     "Where the result goes: a file path, or - for standard output"
     ("--output", "-o")
@@ -46,8 +55,8 @@ class Render(Command):
         return 0
 
     def values(self) -> "_ty.Dict[str, _ty.Any]":
-        """The data: `--data`, then each `--set` over it."""
-        values: _ty.Dict[str, _ty.Any] = {}
+        """The data: the environment with `--env`, then `--data`, then each `--set`."""
+        values: _ty.Dict[str, _ty.Any] = dict(os.environ) if self.environment else {}
         if self.data is not None:
             values.update(self.read_data())
         return merge(values, parse_assignments(self.assignments))

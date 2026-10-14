@@ -124,3 +124,12 @@ def test_several_names_take_the_first_found(project, capsys):
 def test_no_name_is_a_usage_error(project, capsys):
     assert main(["render"]) == 2
     assert "template name" in capsys.readouterr().err
+
+
+def test_env_puts_the_environment_beneath_the_data(project, monkeypatch, capsys):
+    project.write("app.envsubst", "port=${TPLX_TEST_PORT} host=$HOST $request_uri\n")
+    monkeypatch.setenv("TPLX_TEST_PORT", "8080")
+    monkeypatch.setenv("HOST", "from-env")
+    argv = ["render", "app", "-r", "templates", "--env", "-s", "HOST=h1", "-u", "debug"]
+    assert main(argv) == 0
+    assert capsys.readouterr().out == "port=8080 host=h1 $request_uri\n"

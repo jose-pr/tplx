@@ -30,6 +30,7 @@ from ._registry import (
 from ._template import UNDEFINED_MODES, Template, can_process_suffix
 from .engines import (
     CopyTemplate,
+    EnvsubstTemplate,
     EPPTemplate,
     ERBTemplate,
     HandlebarsTemplate,
@@ -83,6 +84,7 @@ __all__ = [
     "ENTRY_POINT_GROUP",
     # shipped engines
     "CopyTemplate",
+    "EnvsubstTemplate",
     "EPPTemplate",
     "ERBTemplate",
     "HandlebarsTemplate",

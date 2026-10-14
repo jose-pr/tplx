@@ -16,10 +16,11 @@ from ._jinja import JinjaTemplate
 from ._liquid import LiquidTemplate
 from ._mako import MakoTemplate
 from ._mustache import MustacheTemplate
-from ._shell import ShellTemplate
+from ._shell import EnvsubstTemplate, ShellTemplate
 
 __all__ = [
     "CopyTemplate",
+    "EnvsubstTemplate",
     "EPPTemplate",
     "ERBTemplate",
     "HandlebarsTemplate",
@@ -40,6 +41,7 @@ for _engine in (
     ERBTemplate,
     EPPTemplate,
     ShellTemplate,
+    EnvsubstTemplate,
     CopyTemplate,
 ):
     register_engine(_engine)

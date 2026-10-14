@@ -231,6 +231,7 @@ rule. Names are root-relative, never relative to the including file.
 | `ERBTemplate` | `.erb` | `ruby` (`TPLX_RUBY`) | none: Ruby `nil` |
 | `EPPTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
 | `ShellTemplate` | `.shtpl` | — | all three |
+| `EnvsubstTemplate` | `.envsubst .template` | — | all three |
 | `CopyTemplate` | any, `FALLBACK_PRIORITY` | — | n/a, returns `bytes` |
 
 - **Jinja** keeps a template's trailing newline and, as Jinja does by
@@ -266,9 +267,31 @@ rule. Names are root-relative, never relative to the including file.
   case-insensitively; by default `target.hostname` is `%{TARGET_HOSTNAME}`,
   list items are numbered, `None` renders empty, booleans `true`/`false`, and
   an unexposed `_`-prefixed name is absent; `%{NAME:-default}` and
-  `%{NAME-default}` as in POSIX shells; `%%` is `%`. A bare `%word` is text.
-  Subclass to change `EXT`, `DELIMITER` or `PATTERN` (`braced`, `unbraced`,
-  `all`).
+  `%{NAME-default}` as in POSIX shells, `%{NAME:1:3}` and `%{NAME: -2}` slices
+  and `%{NAME/pattern/text}` (`//` all, `/#` start, `/%` end; the pattern a
+  bash glob) as in bash; `%%` is `%`. A bare `%word` is text, and so is an
+  expression the engine does not know (`%{NAME:?x}`): its `%` is written and
+  the scan goes on inside it. Subclass to change `EXT`, `DELIMITER`,
+  `PATTERN` (`braced`, `unbraced`, `all`) or `FEATURES`, a subset of
+  `ShellTemplate.ALL_FEATURES`: `escape`, `default`, `assign` (`=`, `:=`), `alternate` (`+`,
+  `:+`), `nested` (a default is substituted), `unquote`, `slice`, `replace`,
+  `trim` (`#`, `##`, `%`, `%%`), `case` (`^`, `^^`, `,`, `,,`), `length`
+  (`{#NAME}`). The shell engine has `escape default unquote slice replace`.
+- **envsubst**: `$NAME` and `${NAME}`, from the data like the shell engine
+  (names match case-insensitively; `tplx render --env` passes the
+  environment). `DIALECT` (subclass to change it) is one of
+  `EnvsubstTemplate.DIALECTS`:
+  `gnu`, the default, as GNU envsubst: no defaults, no `$$` escape, anything
+  else left as text; `a8m` as github.com/a8m/envsubst: defaults, `=`, `+`
+  and nested words, `$$` escapes; `drone` as github.com/drone/envsubst:
+  braced only, defaults, slices, replacements, trims, case and length, `$$`
+  escapes. Setting `PATTERN` or `FEATURES` in a subclass overrides the
+  dialect's (`FEATURES = frozenset({"default"})` for GNU plus `${A:-x}`).
+  Departures, each on purpose: names are case-insensitive; a slice or
+  replacement follows bash where drone does not (negative offsets, glob
+  patterns); an expression a dialect lacks is text, never an error. An
+  undefined name follows the undefined mode: `-u debug` keeps the
+  `$request_uri` of an nginx template, as the nginx image's envsubst does.
 - **Copy**: the file's bytes, never decoded; on its first render, warns when
   the file is UTF-8 text that still holds a `%{NAME}` placeholder.
 
@@ -374,7 +397,7 @@ exits naming the extra. `import tplx` never imports `tplx.cli`.
 
 ```text
 tplx [--version]
-tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
+tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [--env] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
 tplx find NAME... [-r ROOT]... [-p PATH]... [--json]     (alias: which)
 tplx engines [--json]
 ```
@@ -385,7 +408,8 @@ tplx engines [--json]
 - `-r/--root` (repeat; default `templates`), `-p/--path` (repeat; searched
   first, relative ones inside each root), `-u/--undefined` (`strict`,
   `lenient`, `debug`).
-- `render`: `-d/--data` a JSON object file or `-` for standard input;
+- `render`: `--env` starts the data from the environment variables;
+  `-d/--data` a JSON object file or `-` for standard input over it;
   `-s/--set key=value` over it (repeat; `a.b=v` nests and merges into
   `--data`; a value `json:...` is JSON); `-o/--output` a file or `-`. Output
   is written as bytes, unchanged.
