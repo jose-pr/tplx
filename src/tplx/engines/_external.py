@@ -156,7 +156,7 @@ class ERBTemplate(SubprocessTemplate):
         return [program, "-e", _ERB_SCRIPT, values_path, template_path]
 
 
-class EppTemplate(SubprocessTemplate):
+class EPPTemplate(SubprocessTemplate):
     """A Puppet EPP template, rendered by `puppet epp render` (`TPLX_PUPPET` names another).
 
     Every top-level name is an EPP parameter: `<%= $target['hostname'] %>`.

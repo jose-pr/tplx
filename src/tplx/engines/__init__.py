@@ -8,7 +8,7 @@ package imports no engine library.
 
 from .._registry import register_engine
 from ._copy import CopyTemplate
-from ._external import EppTemplate, ERBTemplate, SubprocessTemplate
+from ._external import EPPTemplate, ERBTemplate, SubprocessTemplate
 from ._handlebars import HandlebarsTemplate
 from ._jinja import JinjaTemplate
 from ._liquid import LiquidTemplate
@@ -18,7 +18,7 @@ from ._shell import ShellTemplate
 
 __all__ = [
     "CopyTemplate",
-    "EppTemplate",
+    "EPPTemplate",
     "ERBTemplate",
     "HandlebarsTemplate",
     "JinjaTemplate",
@@ -36,7 +36,7 @@ for _engine in (
     HandlebarsTemplate,
     MustacheTemplate,
     ERBTemplate,
-    EppTemplate,
+    EPPTemplate,
     ShellTemplate,
     CopyTemplate,
 ):

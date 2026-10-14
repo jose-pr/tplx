@@ -91,7 +91,7 @@ class TestERB(EngineContract):
 
 
 @pytest.mark.skipif(shutil.which("puppet") is None, reason="needs puppet installed")
-class TestEpp(EngineContract):
-    engine = tplx.EppTemplate
+class TestEPP(EngineContract):
+    engine = tplx.EPPTemplate
     source = "<%= $name %>"
     expected = "tplx"

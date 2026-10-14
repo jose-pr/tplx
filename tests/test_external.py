@@ -13,7 +13,7 @@ import pytest
 from tplx import (
     DataEncoder,
     EngineUnavailableError,
-    EppTemplate,
+    EPPTemplate,
     ERBTemplate,
     Loader,
     RenderError,
@@ -39,7 +39,7 @@ def _python(engine, script, **attrs):
 
 
 @pytest.mark.parametrize(
-    "engine, env_var", [(ERBTemplate, "TPLX_RUBY"), (EppTemplate, "TPLX_PUPPET")]
+    "engine, env_var", [(ERBTemplate, "TPLX_RUBY"), (EPPTemplate, "TPLX_PUPPET")]
 )
 def test_a_missing_program_names_it_and_the_override(engine, env_var, tmp_path):
     missing = type("Missing", (engine,), {"COMMAND": str(tmp_path / "not-here")})
@@ -49,7 +49,7 @@ def test_a_missing_program_names_it_and_the_override(engine, env_var, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "engine, env_var", [(ERBTemplate, "TPLX_RUBY"), (EppTemplate, "TPLX_PUPPET")]
+    "engine, env_var", [(ERBTemplate, "TPLX_RUBY"), (EPPTemplate, "TPLX_PUPPET")]
 )
 def test_the_env_var_wins_over_path(engine, env_var, monkeypatch, tmp_path):
     fake = tmp_path / "fake-program"
@@ -84,13 +84,13 @@ def test_a_hanging_program_times_out():
 
 def test_crlf_is_normalised_only_when_the_engine_asks():
     emit = "import sys; sys.stdout.buffer.write(b'a\\r\\nb\\r\\n')"
-    assert _python(EppTemplate, emit)("x").render() == "a\nb\n"
-    assert _python(EppTemplate, emit, NEWLINES=None)("x").render() == "a\r\nb\r\n"
+    assert _python(EPPTemplate, emit)("x").render() == "a\nb\n"
+    assert _python(EPPTemplate, emit, NEWLINES=None)("x").render() == "a\r\nb\r\n"
 
 
 def test_a_sentinel_is_written_after_the_template_and_removed_from_the_output():
     echo = "import sys; sys.stdout.write(open(sys.argv[1]).read() + chr(10))"
-    engine = _python(EppTemplate, echo)
+    engine = _python(EPPTemplate, echo)
     assert engine("body").render() == "body"
     assert engine("body\n").render() == "body\n"
 

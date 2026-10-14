@@ -19,7 +19,7 @@ from ._registry import (
 from ._template import UNDEFINED_MODES, Template, can_process_suffix
 from .engines import (
     CopyTemplate,
-    EppTemplate,
+    EPPTemplate,
     ERBTemplate,
     HandlebarsTemplate,
     JinjaTemplate,
@@ -69,7 +69,7 @@ __all__ = [
     "ENTRY_POINT_GROUP",
     # shipped engines
     "CopyTemplate",
-    "EppTemplate",
+    "EPPTemplate",
     "ERBTemplate",
     "HandlebarsTemplate",
     "JinjaTemplate",

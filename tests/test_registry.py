@@ -37,7 +37,7 @@ def test_the_shipped_engines_are_registered_with_the_fallback_last():
         "HandlebarsTemplate",
         "MustacheTemplate",
         "ERBTemplate",
-        "EppTemplate",
+        "EPPTemplate",
         "ShellTemplate",
     } <= set(names)
     assert CopyTemplate.PRIORITY == FALLBACK_PRIORITY

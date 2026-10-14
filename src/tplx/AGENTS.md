@@ -206,7 +206,7 @@ rule. Names are root-relative, never relative to the including file.
 | `HandlebarsTemplate` | `.hbs .handlebars` | `handlebars` | always empty |
 | `MustacheTemplate` | `.mustache` | `mustache` | always empty |
 | `ERBTemplate` | `.erb` | `ruby` (`TPLX_RUBY`) | none: Ruby `nil` |
-| `EppTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
+| `EPPTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
 | `ShellTemplate` | `.shtpl` | — | all three |
 | `CopyTemplate` | any, `FALLBACK_PRIORITY` | — | n/a, returns `bytes` |
 
