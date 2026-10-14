@@ -373,3 +373,15 @@ def test_a_list_and_a_name_are_cached_apart(tree):
 def test_an_empty_list_is_refused():
     with pytest.raises(ValueError, match="no template name"):
         Loader([]).render([])
+
+
+def test_the_copy_warning_is_logged_once_and_never_for_binary_bytes(tree, caplog):
+    tree.write("boot.cfg", "kernel %{KERNEL}")
+    tree.write("ipxe.efi", b"\xff%{NAME}\xfe")
+    loader = Loader([tree.root])
+    with caplog.at_level(logging.WARNING, logger="tplx"):
+        for _ in range(3):
+            loader.render("boot.cfg")
+            loader.render("ipxe.efi")
+    assert caplog.text.count("placeholders") == 1
+    assert "ipxe.efi" not in caplog.text

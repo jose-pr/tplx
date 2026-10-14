@@ -197,3 +197,34 @@ def test_an_include_cannot_escape_the_roots(tree, name):
     tree.write("page.j2", '{%% include "%s" %%}' % name)
     with pytest.raises(TemplateNotFound, match="escapes"):
         Loader([tree.root]).render("page.j2")
+
+
+def test_a_missing_handlebars_partial_raises_only_when_strict(tree):
+    _needs("pybars", "handlebars")
+    tree.write("page.hbs", "[{{> nope}}]")
+    with pytest.raises(TemplateNotFound):
+        Loader([tree.root]).render("page.hbs")
+    assert Loader([tree.root], undefined="lenient").render("page.hbs") == "[]"
+
+
+@pytest.mark.parametrize(
+    "module, extra, page",
+    [("pybars", "handlebars", "page.hbs"), ("chevron", "mustache", "page.mustache")],
+)
+def test_a_partial_is_found_once_and_another_engines_output_follows_the_data(
+    tree, monkeypatch, module, extra, page
+):
+    _needs(module, extra)
+    suffix = page.rsplit(".", 1)[1]
+    tree.write(f"part.{suffix}", "p{{x}}")
+    tree.write("net.shtpl", "n%{X}")
+    tree.write(page, "{{> part}}|{{> net}}")
+    lookup = Loader([tree.root]).lookup()
+    calls = []
+    real = type(lookup).include
+    monkeypatch.setattr(
+        type(lookup), "include", lambda self, *a: calls.append(a[0]) or real(self, *a)
+    )
+    assert lookup.render(page, x=1) == "p1|n1"
+    assert lookup.render(page, x=2) == "p2|n2"
+    assert calls.count("part") == 1

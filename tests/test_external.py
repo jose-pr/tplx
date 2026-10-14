@@ -166,3 +166,10 @@ def test_epp_reports_a_template_error_from_puppet(tree):
     tree.write("bad.epp", "<%= $target[ %>")
     with pytest.raises(RenderError, match="puppet failed to render"):
         Loader([tree.root]).render("bad.epp", DATA)
+
+
+@pytest.mark.skipif(not has_ruby, reason="needs ruby installed")
+def test_erb_keeps_the_whole_hash_in_context_whatever_the_data_names(tree):
+    tree.write("c.erb", "<%= @context['context'] %>|<%= @context.class %>|<%= @n %>")
+    rendered = Loader([tree.root]).render("c.erb", context="mine", n=float("nan"))
+    assert rendered == "mine|Hash|nan"

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping
 
 from .._template import Template
 from ..exceptions import EngineUnavailableError
 from ._partials import Partials
+
+LOGGER = logging.getLogger("tplx")
 
 
 def _chevron():
@@ -32,8 +35,8 @@ class MustacheTemplate(Template):
     is rendered by its own engine with the template's data and its output
     inserted. Under `strict` a partial that cannot be
     found raises `TemplateNotFound`, otherwise it renders empty. chevron has
-    **no strict mode for names**: an undefined name renders empty, and under
-    `strict` chevron's own warning is turned on so it reaches the log.
+    **no strict mode for names**: an undefined name renders empty whatever the
+    undefined mode says.
     As Mustache specifies, `{{x}}` is **HTML-escaped**; `{{{x}}}` or `{{& x}}`
     writes the value as it is.
     """
@@ -53,11 +56,21 @@ class MustacheTemplate(Template):
             # a delimiter change applies only inside the partial.
             return RAW_DELIMITERS + lookup.render_include(name, values)
 
-        partials = Partials(lookup, type(self), str, foreign, strict=strict)
+        if strict:
+            LOGGER.debug(
+                "mustache cannot fail on an undefined name; strict does not "
+                "apply to %s",
+                self.origin,
+            )
+        cache = (
+            lookup.state(("mustache-partials", type(self)), dict) if lookup else None
+        )
+        partials = Partials(
+            lookup, type(self), str, foreign, strict=strict, cache=cache
+        )
         return self._chevron.render(
             self.source,
             self.encoder.view(values),
             partials_path=None,
             partials_dict=partials,
-            warn=strict,
         )

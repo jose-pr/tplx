@@ -11,11 +11,11 @@ from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedErro
 
 LOGGER = logging.getLogger("tplx")
 
-#: Names mako owns inside a template; data under one of them is dropped with a
-#: warning rather than colliding with the render machinery.
 #: The name a stub calls to render another engine's file.
 INCLUDE_NAME = "__tplx_include__"
 
+#: Names mako owns inside a template; data under one of them is dropped with a
+#: warning rather than colliding with the render machinery.
 RESERVED_NAMES = frozenset(
     {
         "self",

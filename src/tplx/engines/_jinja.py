@@ -79,7 +79,8 @@ class JinjaTemplate(Template):
     through the `Lookup` that loaded the file, exactly as a render would: a
     Jinja file is compiled by Jinja, any other is rendered by its own engine
     with the current context and its output inserted. All three undefined
-    modes apply. Output keeps the template's trailing newline.
+    modes apply. Output keeps the template's trailing newline and, as Jinja
+    does by default, writes every line ending as LF.
     """
 
     EXT = (".j2", ".jinja", ".jinja2")

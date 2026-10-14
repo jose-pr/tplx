@@ -30,7 +30,9 @@ class HandlebarsTemplate(Template):
     exactly as a render would: a Handlebars file is compiled by Handlebars, any
     other is rendered by its own engine with the template's data and its
     output inserted. Handlebars has **no strict mode**: an
-    undefined name renders empty whatever the undefined mode says.
+    undefined name renders empty whatever the undefined mode says. A partial
+    that cannot be found raises `TemplateNotFound` under `strict` and renders
+    empty otherwise, as in Mustache.
     As Handlebars specifies, `{{x}}` is **HTML-escaped**; `{{{x}}}` writes the
     value as it is.
     """
@@ -56,6 +58,17 @@ class HandlebarsTemplate(Template):
             # output by the list returned.
             return lambda *args, **kwargs: [lookup.render_include(name, values)]
 
-        partials = Partials(lookup, type(self), self._compiler.compile, foreign)
+        cache = (
+            lookup.state(("handlebars-partials", type(self)), dict) if lookup else None
+        )
+        partials = Partials(
+            lookup,
+            type(self),
+            self._compiler.compile,
+            foreign,
+            strict=self.undefined == "strict",
+            cache=cache,
+            missing=lambda *args, **kwargs: [],
+        )
         # pybars returns a list of fragments, not a string.
         return "".join(self._template(self.encoder.view(values), partials=partials))

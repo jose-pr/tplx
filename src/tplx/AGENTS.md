@@ -221,7 +221,8 @@ rule. Names are root-relative, never relative to the including file.
 | `ShellTemplate` | `.shtpl` | — | all three |
 | `CopyTemplate` | any, `FALLBACK_PRIORITY` | — | n/a, returns `bytes` |
 
-- **Jinja** keeps a template's trailing newline.
+- **Jinja** keeps a template's trailing newline and, as Jinja does by
+  default, writes every line ending as `\n`: a CRLF template renders LF.
 - **mako** drops a data name it reserves (`RESERVED_NAMES`: `self`,
   `context`, `next`, ...) with a warning.
 - **Liquid, Handlebars, Mustache** read the data through
@@ -234,11 +235,15 @@ rule. Names are root-relative, never relative to the including file.
   write values unescaped.
 - **Handlebars, Mustache** cannot fail on an undefined name. Another
   engine's output included in a Mustache template must not contain the bytes
-  `\x01` or `\x02`, which delimit it. Under `strict`, a
-  Mustache partial that cannot be found raises `TemplateNotFound`.
+  `\x01` or `\x02`, which delimit it. A partial that cannot be found raises
+  `TemplateNotFound` under `strict` and renders empty otherwise. Partials are
+  compiled once per lookup and reused while their file is unchanged.
+  Handlebars can drop the `\r` of a CRLF that follows a tag: keep its
+  templates LF.
 - **ERB, EPP** receive the data as JSON from `DataEncoder.json`, so
   `_`-prefixed names are dropped unless the encoder's `expose` lists them. ERB: `@context` is the whole hash and
-  each top-level name is also `@name`. EPP: each top-level name is a
+  each other top-level name is also `@name` (a name `context` stays
+  `@context['context']`). EPP: each top-level name is a
   parameter. Output is the template's own bytes; EPP output has CRLF turned
   into LF. `SubprocessTemplate.TIMEOUT` (60 s) bounds a render.
 - **Shell**: `%{NAME}` from `DataEncoder.flatten`, matched
@@ -248,8 +253,8 @@ rule. Names are root-relative, never relative to the including file.
   `%{NAME-default}` as in POSIX shells; `%%` is `%`. A bare `%word` is text.
   Subclass to change `EXT`, `DELIMITER` or `PATTERN` (`braced`, `unbraced`,
   `all`).
-- **Copy**: the file's bytes, never decoded; warns when they still hold a
-  `%{NAME}` placeholder.
+- **Copy**: the file's bytes, never decoded; on its first render, warns when
+  the file is UTF-8 text that still holds a `%{NAME}` placeholder.
 
 An optional engine is registered whether or not its library is installed, and
 `import tplx` imports none of them.

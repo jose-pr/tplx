@@ -191,3 +191,16 @@ def test_each_engine_keeps_its_own_escaping(tree, module, name, source, expected
 def test_the_package_root_exports_every_shipped_engine():
     names = {cls.__name__ for cls in tplx.registered_engines()}
     assert names <= set(tplx.__all__)
+
+
+def test_mustache_writes_nothing_to_stderr_for_an_undefined_name(tree, capsys):
+    pytest.importorskip("chevron")
+    tree.write("w.mustache", "[{{missing}}]")
+    assert Loader([tree.root]).render("w.mustache") == "[]"
+    assert capsys.readouterr().err == ""
+
+
+def test_liquid_templates_see_only_the_encoded_data(tree):
+    pytest.importorskip("liquid")
+    tree.write("v.liquid", "[{{ __tplx_values__ }}]")
+    assert Loader([tree.root], undefined="lenient").render("v.liquid", x=1) == "[]"

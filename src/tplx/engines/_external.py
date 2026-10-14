@@ -109,7 +109,7 @@ class SubprocessTemplate(Template):
             with open(template_path, "w", encoding="utf-8", newline="") as handle:
                 handle.write(self.source + (self.SENTINEL or ""))
             with open(values_path, "w", encoding="utf-8", newline="\n") as handle:
-                json.dump(document, handle)
+                json.dump(document, handle, allow_nan=False)
             output = _run(
                 self.command(program, template_path, values_path),
                 self.TIMEOUT,
@@ -126,15 +126,17 @@ class SubprocessTemplate(Template):
         return rendered
 
 
-#: Reads the JSON into `@context` and each top-level name that is a legal Ruby
-#: instance variable into `@name`. `print`, not `puts`, so the trailing newline
-#: is the template's; `$stdout.binmode` so Windows ruby writes "\n" unchanged.
+#: Reads the JSON into `@context` and each other top-level name that is a legal
+#: Ruby instance variable into `@name`; a name `context` stays in `@context`.
+#: `print`, not `puts`, so the trailing newline is the template's;
+#: `$stdout.binmode` so Windows ruby writes "\n" unchanged.
 _ERB_SCRIPT = """
 require 'erb'
 require 'json'
 $stdout.binmode
 @context = JSON.parse(File.read(ARGV[0]))
 @context.each do |key, value|
+  next if key == 'context'
   instance_variable_set("@#{key}", value) if key =~ /\\A[a-z_][A-Za-z0-9_]*\\z/
 end
 print ERB.new(File.read(ARGV[1]), trim_mode: '-').result(binding)
@@ -144,8 +146,9 @@ print ERB.new(File.read(ARGV[1]), trim_mode: '-').result(binding)
 class ERBTemplate(SubprocessTemplate):
     """An ERB template, rendered by the system `ruby` (`TPLX_RUBY` names another).
 
-    `@context` is the whole data hash and each top-level name is also an
-    instance variable: `<%= @target['hostname'] %>`. `<%- -%>` trims.
+    `@context` is the whole data hash and each other top-level name is also an
+    instance variable: `<%= @target['hostname'] %>`; a name `context` is
+    `@context['context']`. `<%- -%>` trims.
     """
 
     EXT = (".erb",)

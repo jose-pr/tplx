@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from typing import Any, Mapping
 
 from .._template import Template
@@ -21,8 +22,9 @@ def _liquid():
     return liquid, TemplateSource
 
 
-#: The render argument carrying the data as given, for another engine's include.
-VALUES_NAME = "__tplx_values__"
+#: The data of the render in progress, as given, for another engine's include;
+#: kept out of the template's own names.
+_VALUES: "ContextVar[Mapping[str, Any]]" = ContextVar("tplx_liquid_values")
 
 _ENDRAW = re.compile(r"\{%-?\s*endraw\s*-?%\}")
 
@@ -55,8 +57,7 @@ def _environment(liquid, TemplateSource, lookup, engine: type, mode: str):
                 return TemplateSource(found.text, source.origin, source.uptodate, None)
             # Another engine's file, rendered with the data of this render and
             # inserted as raw text.
-            values = context.globals.get(VALUES_NAME, {}) if context else {}
-            text = lookup.render_include(template_name, values)
+            text = lookup.render_include(template_name, _VALUES.get({}))
             return TemplateSource(_raw(text), source.origin, None, None)
 
     undefined = {
@@ -93,13 +94,14 @@ class LiquidTemplate(Template):
         self._template = environment.from_string(source, name=origin)
 
     def render_values(self, values: "Mapping[str, Any]") -> str:
+        token = _VALUES.set(values)
         try:
-            data = self.encoder.view(values)
-            data[VALUES_NAME] = values
-            return self._template.render(**data)
+            return self._template.render(**self.encoder.view(values))
         except self._liquid.exceptions.UndefinedError as exc:
             raise UndefinedError(f"{self.origin}: {exc}") from exc
         except self._liquid.exceptions.TemplateNotFoundError as exc:
             if isinstance(exc.__cause__, TemplateNotFound):
                 raise exc.__cause__ from None
             raise
+        finally:
+            _VALUES.reset(token)
