@@ -10,13 +10,20 @@ and both answer to `boot.cfg`. A file no engine claims is copied byte for byte.
 pip install tplx
 ```
 
-| Extra | Adds | Needed for |
-| --- | --- | --- |
-| `jinja` | `jinja2` | `.j2`, `.jinja`, `.jinja2` |
-| `mako` | `mako` | `.mako` |
-| `liquid` | `python-liquid` | `.liquid` |
-| `handlebars` | `pybars3` | `.hbs`, `.handlebars` |
-| `mustache` | `chevron` | `.mustache` |
+| Engine | Suffixes | Install | Undefined names | Includes |
+| --- | --- | --- | --- | --- |
+| Jinja | `.j2` `.jinja` `.jinja2` | `tplx[jinja]` | strict, lenient, debug | `{% include %}` `{% extends %}` `{% import %}` `{% from %}` |
+| mako | `.mako` | `tplx[mako]` | strict, lenient (`debug` is lenient) | `<%include/>` `<%inherit/>` `<%namespace/>` |
+| Liquid | `.liquid` | `tplx[liquid]` | strict, lenient, debug | `{% include %}` `{% render %}` |
+| Handlebars | `.hbs` `.handlebars` | `tplx[handlebars]` | always empty | `{{> name}}` |
+| Mustache | `.mustache` | `tplx[mustache]` | always empty | `{{> name}}` |
+| ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
+| EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
+| shell (`%{NAME}`) | `.shtpl` | — | strict, lenient, debug | — |
+| copy | any other | — | n/a: the bytes as stored | — |
+
+Each library-backed engine is an extra of that name; the `cli` extra adds the
+[`tplx` command](cli.md).
 
 ## 30-second tour
 
@@ -43,7 +50,15 @@ likely to surprise in a generated file is escaping:
 | Mustache | HTML-escaped | `{{{x}}}` or `{{& x}}` |
 | Jinja, mako, Liquid, ERB, EPP, shell | the value as it is | — |
 
+## Trust
+
+Templates and their roots are trusted, in every engine alike: Jinja and
+mako run Python, ERB and EPP run Ruby and Puppet. What tplx guards is the
+template **name**: one that would leave the search paths (`..`, a backslash,
+a drive) is refused.
+
 ## Learn more
 
+- [Command line](cli.md)
 - [API reference](api/reference.md)
 - [Changelog](changelog.md)

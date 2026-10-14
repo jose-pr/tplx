@@ -6,8 +6,9 @@ without reading its source. It ships inside the package and is
 self-contained. Development documentation lives with the source at
 <https://github.com/jose-pr/tplx>.
 
-Every public name is importable from `tplx`; `tplx.exceptions`, `tplx.engines`
-and `tplx.testing` are public too. Modules whose name starts with an underscore
+Every public name is importable from `tplx`, except `EngineContract`, which
+is in `tplx.testing`; `tplx.exceptions`, `tplx.engines` and `tplx.testing` are
+public too. Modules whose name starts with an underscore
 are private.
 
 `pip install tplx` gives the loader, the shell engine and the copy engine with
@@ -17,6 +18,11 @@ engine's library is an extra: `jinja` (jinja2),
 (chevron). `.erb` needs `ruby` and `.epp` needs `puppet` on `PATH`.
 
 `tplx.__version__` is the installed distribution's version.
+
+Templates and their roots are trusted, in every engine alike: Jinja and
+mako run Python, ERB and EPP run Ruby and Puppet. What tplx guards is the
+template **name**: one that would leave the search paths (`..`, a backslash,
+a drive) is refused.
 
 ## Loading and rendering (`tplx`)
 
@@ -345,6 +351,7 @@ All in `tplx.exceptions`, all re-exported from `tplx`.
 exits naming the extra. `import tplx` never imports `tplx.cli`.
 
 ```text
+tplx [--version]
 tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
 tplx find NAME... [-r ROOT]... [-p PATH]... [--json]     (alias: which)
 tplx engines [--json]
@@ -363,14 +370,16 @@ tplx engines [--json]
 - `find` prints `<origin>\t<Engine>`, or `{"origin", "engine"}` with `--json`.
 - `engines` prints `<Engine>\t<suffixes>\t<priority>` per engine, highest
   priority first, or a JSON array with `--json`.
+- `render` and `find` also take `-v`/`-q` and `--loglevel [NAME:]LEVEL`.
 - Exit status: `0` done, `1` the operation failed (no such template, an
   engine error, a file that cannot be read or written), `2` a usage error. A
   failure prints `tplx: error: <message>` on standard error.
 
 ## Environment variables
 
-- `TPLX_RUBY` — the `ruby` the ERB engine runs, when not the one on `PATH`.
-- `TPLX_PUPPET` — the `puppet` the EPP engine runs.
+- `TPLX_RUBY` — the `ruby` the ERB engine runs; default: `ruby` on `PATH`.
+- `TPLX_PUPPET` — the `puppet` the EPP engine runs; default: `puppet` on
+  `PATH`.
 
 ## Gotchas
 

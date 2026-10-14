@@ -39,21 +39,30 @@ Documentation: <https://jose-pr.github.io/tplx/>.
 pip install tplx
 ```
 
-| Extra | Adds | Needed for |
-| --- | --- | --- |
-| `jinja` | `jinja2` | `.j2`, `.jinja`, `.jinja2` |
-| `mako` | `mako` | `.mako` |
-| `liquid` | `python-liquid` | `.liquid` |
-| `handlebars` | `pybars3` | `.hbs`, `.handlebars` |
-| `mustache` | `chevron` | `.mustache` |
-| `cli` | `duho` | the `tplx` command |
+| Engine | Suffixes | Install | Undefined names | Includes |
+| --- | --- | --- | --- | --- |
+| Jinja | `.j2` `.jinja` `.jinja2` | `tplx[jinja]` | strict, lenient, debug | `{% include %}` `{% extends %}` `{% import %}` `{% from %}` |
+| mako | `.mako` | `tplx[mako]` | strict, lenient (`debug` is lenient) | `<%include/>` `<%inherit/>` `<%namespace/>` |
+| Liquid | `.liquid` | `tplx[liquid]` | strict, lenient, debug | `{% include %}` `{% render %}` |
+| Handlebars | `.hbs` `.handlebars` | `tplx[handlebars]` | always empty | `{{> name}}` |
+| Mustache | `.mustache` | `tplx[mustache]` | always empty | `{{> name}}` |
+| ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
+| EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
+| shell (`%{NAME}`) | `.shtpl` | — | strict, lenient, debug | — |
+| copy | any other | — | n/a: the bytes as stored | — |
 
-`.erb` needs `ruby` on `PATH` and `.epp` needs `puppet`; neither has an extra.
+Each library-backed engine is an extra of that name (`pip install
+"tplx[jinja,mako]"`); the `cli` extra adds the `tplx` command.
 
 Each engine keeps its own syntax and defaults. In particular Handlebars and
 Mustache HTML-escape `{{x}}` (`&` becomes `&amp;`), as their specifications
 say; write `{{{x}}}` for the value as it is. The other engines write values
 unescaped.
+
+Templates and their roots are trusted, in every engine alike: Jinja and
+mako run Python, ERB and EPP run Ruby and Puppet. What tplx guards is the
+template **name**: one that would leave the search paths (`..`, a backslash,
+a drive) is refused.
 
 ## Quick start
 
@@ -101,18 +110,19 @@ status: `0` done, `1` the template or an engine failed, `2` a usage error.
 ## Development
 
 ```bash
-python -m venv .venv/3.14-nt-arm64
-.venv/3.14-nt-arm64/Scripts/python -m pip install -e ".[dev,docs]"
-.venv/3.14-nt-arm64/Scripts/python -m pytest -q -rs
+python -m venv .venv/3.14
+.venv/3.14/bin/python -m pip install -e ".[dev,docs]"   # Scripts/ on Windows
+.venv/3.14/bin/python -m pytest -q -rs
 ```
 
 ### Releasing
 
 This project follows [Semantic Versioning](https://semver.org/) and keeps a
 [`CHANGELOG.md`](https://github.com/jose-pr/tplx/blob/main/CHANGELOG.md).
-Pushing a tag matching `v*` triggers the release workflow: test gate → build
-(checking the tag names the version built) → a strict docs build as a gate →
-GitHub release → publish. The release workflow never deploys the docs site
+Pushing a tag matching `v*` triggers the release workflow: test and
+dependency-floor gates → build (checking the tag names the version built) →
+an installed-wheel smoke test and a strict docs build as gates → GitHub
+release → publish. The release workflow never deploys the docs site
 itself: for a final release its last job dispatches the docs workflow at the
 tag, which owns every Pages deploy.
 
