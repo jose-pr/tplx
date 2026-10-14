@@ -14,7 +14,8 @@ Documentation: <https://jose-pr.github.io/tplx/>.
 ## Features
 
 - **One call for every engine** — Jinja, mako, Liquid, Handlebars, Mustache,
-  ERB, EPP and a `%{NAME}` shell-style engine, each rendering the same data.
+  ERB, EPP, envsubst (as GNU, a8m or drone) and a `%{NAME}` shell-style
+  engine, each rendering the same data.
 - **Name by stem, dispatch by suffix** — a caller asks for `boot.cfg`; the file
   found decides the engine.
 - **Several search roots**, local or remote, searched in order, plus
@@ -49,6 +50,7 @@ pip install tplx
 | ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
 | EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
 | shell (`%{NAME}`) | `.shtpl` | — | strict, lenient, debug | — |
+| envsubst (`$NAME`, GNU, a8m or drone) | `.envsubst` `.template` | — | strict, lenient, debug | — |
 | copy | any other | — | n/a: the bytes as stored | — |
 
 Each library-backed engine is an extra of that name (`pip install
@@ -105,6 +107,7 @@ tplx render boot.cfg -r templates -d host.json -o boot.cfg  # a name, data from 
 tplx render web01.boot.cfg boot.cfg -r templates         # the first name found
 tplx find boot.cfg -r templates                          # which file, which engine
 tplx engines                                             # what is registered
+tplx render nginx.conf -r templates --env -u debug       # envsubst from the environment
 ```
 
 `-s a.b=v` nests and merges into `--data`; `-s n=json:3` passes JSON. Exit

@@ -20,6 +20,7 @@ pip install tplx
 | ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
 | EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
 | shell (`%{NAME}`) | `.shtpl` | — | strict, lenient, debug | — |
+| envsubst (`$NAME`, GNU, a8m or drone) | `.envsubst` `.template` | — | strict, lenient, debug | — |
 | copy | any other | — | n/a: the bytes as stored | — |
 
 Each library-backed engine is an extra of that name; the `cli` extra adds the

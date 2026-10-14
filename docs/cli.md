@@ -9,11 +9,12 @@ tplx render boot.cfg -r templates -d host.json -o boot.cfg  # a name, data from 
 tplx render web01.boot.cfg boot.cfg -r templates         # the first name found
 tplx find boot.cfg -r templates                          # which file, which engine
 tplx engines                                             # what is registered
+tplx render nginx.conf -r templates --env -u debug       # envsubst from the environment
 ```
 
 ```text
 tplx [--version]
-tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
+tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [--env] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
 tplx find NAME... [-r ROOT]... [-p PATH]... [--json]     (alias: which)
 tplx engines [--json]
 ```
@@ -24,7 +25,8 @@ tplx engines [--json]
 - `-r/--root` (repeat; default `templates`), `-p/--path` (repeat; searched
   first, relative ones inside each root), `-u/--undefined` (`strict`,
   `lenient`, `debug`).
-- `render`: `-d/--data` a JSON object file or `-` for standard input;
+- `render`: `--env` starts the data from the environment variables;
+  `-d/--data` a JSON object file or `-` for standard input over it;
   `-s/--set key=value` over it (repeat; `a.b=v` nests and merges into
   `--data`; a value `json:...` is JSON); `-o/--output` a file or `-`. Output
   is written as bytes, unchanged.
