@@ -14,6 +14,12 @@ license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Topic :: Text Processing :: Markup",
     "Typing :: Typed",
@@ -25,7 +31,8 @@ dependencies = []
 # 3.0 is jinja2's importable floor: 2.x calls markupsafe.soft_unicode, which
 # MarkupSafe 2.1 removed.
 jinja = ["jinja2>=3.0,<4"]
-mako = ["mako>=1.2,<2"]
+# 1.1: 1.0.x calls time.clock, which Python 3.8 removed.
+mako = ["mako>=1.1,<2"]
 # 2.0 has the `liquid.loader.TemplateSource` and keyword `context=` loader
 # contract the include tags go through.
 liquid = ["python-liquid>=2.0,<3"]
@@ -35,19 +42,16 @@ mustache = ["chevron>=0.14.0,<0.15"]
 # The `tplx` command line; importing tplx never needs it.
 cli = ["duho>=0.7.0,<0.8"]
 dev = [
-    "tplx[cli]",
+    # Every engine extra, so their tests run rather than skip, within the
+    # ranges a user gets.
+    "tplx[cli,jinja,mako,liquid,handlebars,mustache]",
     "black",
     "build",
     "pytest",
-    # Every engine library, so their tests run rather than skip.
-    "jinja2",
-    "mako",
-    "python-liquid",
-    "pybars3",
-    "chevron",
 ]
 docs = [
-    "mkdocs",
+    # MkDocs 2 drops the plugin system mkdocstrings needs.
+    "mkdocs<2",
     "mkdocs-material",
     "mkdocstrings[python]",
     # 12.2 made Highlight(md) required; mkdocstrings 1.0.6 (the newest on 3.10) omits it.
