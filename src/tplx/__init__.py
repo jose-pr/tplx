@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 
 from ._encoder import DataEncoder, DataView
-from ._loader import DEFAULT_ROOT, Include, Loader, Lookup, Source
+from ._loader import DEFAULT_ROOT, LOOKUP_CACHE_SIZE, Include, Loader, Lookup, Source
 from ._registry import (
     ANY_SUFFIX,
     DEFAULT_PRIORITY,
@@ -52,6 +52,7 @@ __all__ = [
     "Source",
     "Include",
     "DEFAULT_ROOT",
+    "LOOKUP_CACHE_SIZE",
     "DataEncoder",
     "DataView",
     # the engine contract and registry

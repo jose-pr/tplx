@@ -37,10 +37,42 @@ def test_an_exact_file_name_beats_a_stem_match(tree):
     assert Loader([tree.root]).render("boot.j2") == "real"
 
 
-def test_stem_matches_resolve_to_the_lowest_name(tree):
+def test_equal_priority_stem_matches_resolve_to_the_lowest_name(tree):
     tree.write("boot.shtpl", "shell")
     tree.write("boot.j2", "jinja")
     assert Loader([tree.root]).render("boot") == "jinja"
+
+
+def test_a_template_outranks_a_leftover_that_sorts_first(tree):
+    tree.write("net.cfg.bak", "STALE")
+    tree.write("net.cfg.j2", "live")
+    assert Loader([tree.root]).render("net.cfg") == "live"
+
+
+def test_a_file_only_the_fallback_claims_is_used_when_nothing_else_matches(tree):
+    tree.write("net.cfg.bak", "copied")
+    assert Loader([tree.root]).render("net.cfg") == b"copied"
+
+
+def test_a_directory_named_like_the_template_is_skipped(tree):
+    (tree.root / "debian").mkdir()
+    (tree.root / "boot.cfg.d").mkdir()
+    tree.write("debian.j2", "file")
+    tree.write("boot.cfg.j2", "cfg")
+    loader = Loader([tree.root])
+    assert loader.render("debian") == "file"
+    assert loader.render("boot.cfg") == "cfg"
+
+
+def test_a_root_or_parent_that_is_a_file_is_not_searched(tree, tmp_path):
+    not_a_dir = tmp_path / "file-root"
+    not_a_dir.write_text("x")
+    tree.write("afile", "x")
+    tree.write("b.j2", "found")
+    loader = Loader([not_a_dir, tree.root])
+    assert loader.render("b") == "found"
+    with pytest.raises(TemplateNotFound):
+        loader.render("afile/x")
 
 
 def test_roots_are_searched_in_order(tree, tmp_path):
@@ -64,9 +96,39 @@ def test_templates_are_read_as_utf8(tree):
     assert Loader([tree.root]).render("u.j2") == "café-日本"
 
 
-def test_a_name_cannot_escape_the_roots(tree):
+@pytest.mark.parametrize(
+    "name",
+    [
+        "../../etc/passwd",
+        "..\\secret/x",
+        "a\\..\\..\\x",
+        "C:/x",
+        "C:x",
+        "//host/share/x",
+    ],
+)
+def test_a_name_cannot_escape_the_roots(tree, name):
     with pytest.raises(TemplateNotFound, match="escapes"):
-        Loader([tree.root]).render("../../etc/passwd")
+        Loader([tree.root]).render(name)
+
+
+def test_a_directory_is_listed_once_per_find(tree, tmp_path, monkeypatch):
+    import pathlib
+
+    second = tmp_path / "second"
+    (second / "sub").mkdir(parents=True)
+    (tree.root / "sub").mkdir()
+    tree.write("boot.j2", "x", root=second)
+    listed = []
+    real = pathlib.Path.iterdir
+    monkeypatch.setattr(
+        pathlib.Path, "iterdir", lambda self: listed.append(self) or real(self)
+    )
+    loader = Loader([tree.root, second])
+    loader.find(
+        "boot", candidates=lambda name: ["a." + name, "b." + name, name], paths=["sub"]
+    )
+    assert len(listed) == len(set(listed)) == 4
 
 
 def test_a_missing_name_is_template_not_found(tree):
@@ -130,6 +192,35 @@ def test_the_same_arguments_give_the_same_lookup():
 
     assert loader.lookup(candidates=candidates) is loader.lookup(candidates=candidates)
     assert loader.lookup(paths=["a"]) is not loader.lookup(paths=["b"])
+
+
+def test_lookups_for_a_new_function_per_call_do_not_pile_up():
+    loader = Loader([])
+    for each in range(tplx.LOOKUP_CACHE_SIZE * 3):
+        loader.lookup(candidates=lambda name, each=each: [name])
+    assert len(loader._lookups) == tplx.LOOKUP_CACHE_SIZE
+
+
+def test_clear_finds_a_more_specific_file_added_later(tree):
+    tree.write("ok.j2", "generic")
+    lookup = Loader([tree.root]).lookup(candidates=lambda name: ["web01." + name, name])
+    assert lookup.render("ok") == "generic"
+    tree.write("web01.ok.j2", "specific")
+    assert lookup.render("ok") == "generic"
+    lookup.clear()
+    assert lookup.render("ok") == "specific"
+
+
+def test_candidates_receive_the_file_name_and_the_directory_is_kept(tree):
+    tree.write("debian/web01.boot.j2", "host")
+    seen = []
+
+    def candidates(name):
+        seen.append(name)
+        return ["web01." + name, name]
+
+    assert Loader([tree.root]).render("debian/boot", candidates=candidates) == "host"
+    assert seen == ["boot"]
 
 
 # -- engines and bytes -------------------------------------------------------

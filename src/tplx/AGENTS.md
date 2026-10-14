@@ -27,8 +27,8 @@ Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None
 Finds templates under `roots` and renders them with the engine each needs.
 
 - `roots`: directories searched in order. A `str` or `os.PathLike` is a local
-  `pathlib.Path`; any object with pathlib's `/`, `exists`, `iterdir`, `name`,
-  `stem`, `suffix`, `read_bytes` and `stat` is used as it is (remote paths
+  `pathlib.Path`; any object with pathlib's `/`, `exists`, `iterdir`,
+  `is_file`, `name`, `stem`, `suffix`, `read_bytes` and `stat` is used as it is (remote paths
   from `pathlib_next` qualify). Empty means `templates` in the working
   directory (`DEFAULT_ROOT`).
 - `engines`: the engine classes to consider; default the registry as it is
@@ -41,14 +41,18 @@ Finds templates under `roots` and renders them with the engine each needs.
 - Attributes: `roots`, `engines` (tuple), `undefined`, `globals` (dict),
   `encoder`.
 
-**Resolution**: a name may hold directories (`debian/boot`); a `..` segment
-raises `TemplateNotFound`. Wherever a name is taken (`render`, `get`, `find`,
+**Resolution**: a name may hold directories (`debian/boot`), separated by
+`/`. A name with a `..` segment, a backslash, a NUL or a drive (`C:/x`,
+`//host/share`) raises `TemplateNotFound`, on every platform. Wherever a name is taken (`render`, `get`, `find`,
 `resolve`), a **list of names** may be given instead: each is tried in turn,
 with all of its candidates in every search path, and the first file found
 wins (`render(["web01.boot.cfg", "boot.cfg"])`). An empty list is a
-`ValueError`. A `str` is always one name. In each directory an exact file name wins;
-otherwise the lowest-sorting file whose **stem** is the name (`boot.cfg`
-finds `boot.cfg.j2`). The first engine whose `can_process` accepts the file
+`ValueError`. A `str` is always one name. In each directory an exact file
+name wins; otherwise, among the files whose **stem** is the name (`boot.cfg`
+finds `boot.cfg.j2`), the one whose suffix the highest-`PRIORITY` engine
+claims, then the lowest name: `boot.cfg.j2` beats a leftover `boot.cfg.bak`,
+which only the copy engine claims. Directories are never matched. The first
+engine whose `can_process` accepts the file
 builds it, so **the suffix picks the engine**. Files are read as bytes; a text
 engine needs UTF-8.
 
@@ -56,17 +60,21 @@ engine needs UTF-8.
 Loader.lookup(*, candidates=None, paths=()) -> Lookup
 ```
 
-The loader bound to one caller's search. `candidates(name) -> Iterable[str]`
-lists the file names to try for `name`, most specific first (default: only
-`name`). `paths` are searched before the roots: an anchored one (absolute,
+The loader bound to one caller's search. `candidates(file_name) ->
+Iterable[str]` lists the file names to try for the **last part** of a name,
+most specific first (default: only that file name); the directory part
+(`debian/` in `debian/boot`) is kept, and a candidate holding a `/` never
+matches. `paths` are searched before the roots: an anchored one (absolute,
 rooted, or containing `://`) as it is, a relative one inside each root.
 Includes inside a template go through the same lookup. The same arguments
-return the same `Lookup` when they are hashable.
+return the same `Lookup` when they are hashable, among the
+`LOOKUP_CACHE_SIZE` (64) most recently used: define `candidates` once rather
+than a new function per call.
 
 ```python
 Loader.render(name, data=None, /, *, candidates=None, paths=(), **overrides) -> str | bytes
-Loader.get(name, **lookup_args) -> Template
-Loader.find(name, **lookup_args) -> Source
+Loader.get(name, **lookup) -> Template
+Loader.find(name, **lookup) -> Source
 ```
 
 One-shot forms of the `Lookup` methods. A data name that is `candidates` or
@@ -86,7 +94,8 @@ copy engine). Raises everything `get` raises; an engine failure is
 Lookup.get(name) -> Template
 ```
 
-The compiled template, cached by name while its file is unchanged. Raises
+The compiled template, cached by name while its file is unchanged (a more
+specific file added later is found after `clear()`). Raises
 `TemplateNotFound`, `NoEngineError` (no engine claims the file, or it is not
 UTF-8 for a text engine), `EngineUnavailableError` (the claiming engine's extra
 or program is missing), `RenderError` (it does not compile).
@@ -121,6 +130,7 @@ class Include(NamedTuple): source: Source; engine: type; text: str | None
 ```
 
 - `Lookup.search_paths() -> list`: the directories searched, in order.
+- `Lookup.clear()`: forget the compiled templates and engine state.
 - `Lookup.state(key, factory)`: per-lookup state an engine builds once (its
   `Environment`, its `TemplateLookup`).
 - Attributes: `loader`, `candidates`, `paths`.
@@ -352,4 +362,7 @@ tplx engines [--json]
 - `Template.render` on its own does not wrap an engine's exception in
   `RenderError`; `Lookup.render` does.
 - A `str` root is always local: pass a path object for a URI.
+- A compiled template is reused while **its own** file is unchanged; adding a
+  file that would now win (an earlier candidate, an exact name) takes effect
+  after `Lookup.clear()` or with a new `Loader`.
 - The logger is `tplx`; nothing is configured on import.

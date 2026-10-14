@@ -191,8 +191,9 @@ def test_bytes_that_are_not_text_cannot_be_included(tree):
         Loader([tree.root]).render("page.j2")
 
 
-def test_an_include_cannot_escape_the_roots(tree):
+@pytest.mark.parametrize("name", ["../secret", "..\\\\secret", "C:/secret"])
+def test_an_include_cannot_escape_the_roots(tree, name):
     _needs("jinja2", "jinja")
-    tree.write("page.j2", '{% include "../secret" %}')
+    tree.write("page.j2", '{%% include "%s" %%}' % name)
     with pytest.raises(TemplateNotFound, match="escapes"):
         Loader([tree.root]).render("page.j2")

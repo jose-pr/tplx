@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `Loader` and `Lookup`: find a template by name (an exact file name, or the
-  lowest-sorting file whose stem is the name) under several roots, with
+  file whose stem is the name and whose suffix the highest-priority engine
+  claims, so `boot.cfg.j2` beats a leftover `boot.cfg.bak`) under several
+  roots, with
   per-caller `candidates` and `paths`, and render it with the engine its suffix
   names. `render(name, data, **overrides)`; `name` may be a list of names,
-  the first one found wins.
+  the first one found wins. A name holding `..`, a backslash or a drive is
+  refused on every platform. `Lookup.clear()`; `LOOKUP_CACHE_SIZE`.
 - Engines: Jinja, mako, Liquid, Handlebars, Mustache (each behind an extra of
   that name), ERB (`ruby`), EPP (`puppet`), a `%{NAME}` shell engine and a
   byte-exact copy engine for every other file.

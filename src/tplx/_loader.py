@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import pathlib
-from pathlib import PurePosixPath
+from collections import OrderedDict
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import (
     Any,
     Callable,
@@ -21,9 +22,9 @@ from typing import (
 )
 
 from . import _registry
-from ._registry import by_priority, template_extensions
+from ._registry import FALLBACK_PRIORITY, by_priority, template_extensions
 from ._encoder import DataEncoder, unwrap
-from ._template import UNDEFINED_MODES, Template
+from ._template import UNDEFINED_MODES, Template, can_process_suffix
 from .exceptions import NoEngineError, RenderError, TemplateNotFound, TplxError
 
 #: Where templates are looked for when a `Loader` is given no root.
@@ -35,6 +36,21 @@ Candidates = Callable[[str], Iterable[str]]
 #: One template name, or several tried in order (the first found wins).
 Names = Union[str, Sequence[str]]
 
+#: How many `Lookup`s a `Loader` keeps for reuse; the least recently used goes.
+LOOKUP_CACHE_SIZE = 64
+
+
+def _escapes(name: str) -> bool:
+    """Could `name` reach outside a search path on some platform?
+
+    A `..` segment, a backslash (a separator on Windows), a NUL, or a drive or
+    UNC share (`C:/x`, `//host/share`) is refused everywhere, so a name means
+    the same file on every platform.
+    """
+    if "\\" in name or "\x00" in name or PureWindowsPath(name).drive:
+        return True
+    return ".." in PurePosixPath(name.lstrip("/")).parts
+
 
 def _names(name: "Names") -> List[str]:
     """`name` as a list of names, each refused when it escapes the search paths."""
@@ -44,7 +60,7 @@ def _names(name: "Names") -> List[str]:
     for each in names:
         if not isinstance(each, str):
             raise TypeError(f"a template name is a str, not {type(each).__name__}")
-        if ".." in PurePosixPath(each.lstrip("/")).parts:
+        if _escapes(each):
             raise TemplateNotFound(
                 each, f"template name escapes the search paths: {each!r}"
             )
@@ -108,12 +124,62 @@ def _origin(path) -> str:
         return str(path)
 
 
+def _claimed_priority(entry, engines: "Sequence[type]") -> int:
+    """The `PRIORITY` of the first engine whose suffixes claim `entry`."""
+    for cls in engines:
+        if can_process_suffix(cls, entry):
+            return int(cls.PRIORITY)
+    return FALLBACK_PRIORITY - 1
+
+
+class _Listing:
+    """One directory's entries, indexed by file name and by stem."""
+
+    def __init__(self, entries: "Iterable[Any]") -> None:
+        self.by_name: Dict[str, Any] = {}
+        self.by_stem: Dict[str, List[Any]] = {}
+        for entry in entries:
+            self.by_name[entry.name] = entry
+            self.by_stem.setdefault(entry.stem, []).append(entry)
+
+    @classmethod
+    def of(cls, directory) -> "Optional[_Listing]":
+        """`directory`'s listing, or None when it is not a directory."""
+        if not directory.exists():
+            return None
+        try:
+            return cls(directory.iterdir())
+        except NotADirectoryError:
+            return None
+
+    def match(self, filename: str, engines: "Sequence[type]"):
+        """The file for `filename`: the exact name, else the best stem match.
+
+        Among stem matches, the one whose suffix the highest-priority engine
+        claims wins, then the lowest name; a leftover such as `boot.cfg.bak`,
+        which only the catch-all claims, loses to `boot.cfg.j2`. Directories
+        are skipped.
+        """
+        exact = self.by_name.get(filename)
+        if exact is not None and exact.is_file():
+            return exact
+        ranked = sorted(
+            self.by_stem.get(filename, ()),
+            key=lambda entry: (-_claimed_priority(entry, engines), entry.name),
+        )
+        for entry in ranked:
+            if entry.is_file():
+                return entry
+        return None
+
+
 class Loader:
     """Finds templates under `roots` and renders them with the engine each one needs.
 
     A name is resolved against every root in order. In each directory an
-    exact file name wins; otherwise the lowest-sorting file whose stem is the
-    name (`boot.cfg` finds `boot.cfg.j2`). The engines are consulted highest
+    exact file name wins; otherwise, among the files whose stem is the name
+    (`boot.cfg` finds `boot.cfg.j2`), the one whose suffix the highest-priority
+    engine claims, then the lowest name. The engines are consulted highest
     `PRIORITY` first and the first whose `can_process` accepts the file builds
     it, so the suffix picks the engine.
 
@@ -144,7 +210,7 @@ class Loader:
         self.undefined = undefined
         self.globals: dict = dict(globals or {})
         self.encoder = encoder if encoder is not None else DataEncoder()
-        self._lookups: Dict[Hashable, Lookup] = {}
+        self._lookups: "OrderedDict[Hashable, Lookup]" = OrderedDict()
 
     def lookup(
         self,
@@ -154,11 +220,14 @@ class Loader:
     ) -> "Lookup":
         """The loader bound to one caller's file names and search paths.
 
-        `candidates(name)` lists the file names to try for `name`, most
-        specific first; by default only `name`. `paths` are searched before the
+        `candidates(file_name)` lists the file names to try for the last part
+        of a name, most specific first; by default only that file name. The
+        directory part of the name is kept. `paths` are searched before the
         roots: an anchored path as it is, a relative one inside each root.
         Includes inside a template resolve through the same `Lookup`. The same
-        arguments return the same `Lookup`, which caches what it compiles.
+        arguments return the same `Lookup`, which caches what it compiles,
+        while it is among the `LOOKUP_CACHE_SIZE` most recently used; pass a
+        `candidates` function that is defined once, not a new one per call.
         """
         try:
             key: Hashable = (candidates, tuple(_origin(p) for p in paths))
@@ -166,10 +235,12 @@ class Loader:
         except TypeError:
             return Lookup(self, candidates=candidates, paths=paths)
         found = self._lookups.get(key)
-        if found is None:
-            found = self._lookups[key] = Lookup(
-                self, candidates=candidates, paths=paths
-            )
+        if found is not None:
+            self._lookups.move_to_end(key)
+            return found
+        found = self._lookups[key] = Lookup(self, candidates=candidates, paths=paths)
+        if len(self._lookups) > LOOKUP_CACHE_SIZE:
+            self._lookups.popitem(last=False)
         return found
 
     def find(self, name: "Names", **lookup: Any) -> Source:
@@ -253,14 +324,20 @@ class Lookup:
         names: List[str] = (
             list(self.candidates(filename)) if self.candidates else [filename]
         )
-        directories = self.search_paths()
+        directories = [
+            directory / parent if parent is not None else directory
+            for directory in self.search_paths()
+        ]
+        # Each directory is listed once per find, however many candidates.
+        listings: Dict[int, Optional[_Listing]] = {}
         for candidate in names:
-            for directory in directories:
-                if parent is not None:
-                    directory = directory / parent
-                if not directory.exists():
+            for index, directory in enumerate(directories):
+                if index not in listings:
+                    listings[index] = _Listing.of(directory)
+                listing = listings[index]
+                if listing is None:
                     continue
-                path = self._match(directory, candidate)
+                path = listing.match(candidate, self.loader.engines)
                 if path is None:
                     continue
                 data = path.read_bytes()
@@ -275,16 +352,14 @@ class Lookup:
                 return Source(data, path.name, _origin(path), uptodate)
         return None
 
-    @staticmethod
-    def _match(directory, filename: str):
-        """The entry in `directory` for `filename`: exact first, else the lowest stem match."""
-        best = None
-        for entry in directory.iterdir():
-            if entry.name == filename:
-                return entry
-            if entry.stem == filename and (best is None or entry.name < best.name):
-                best = entry
-        return best
+    def clear(self) -> None:
+        """Forget the compiled templates and engine state; the next render resolves afresh.
+
+        A cached template is reused while its own file is unchanged, so a more
+        specific file added later is found only after this.
+        """
+        self._templates.clear()
+        self._state.clear()
 
     def _engine_for(
         self, name: "Names", source: Source
