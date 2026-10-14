@@ -245,7 +245,11 @@ rule. Names are root-relative, never relative to the including file.
   each other top-level name is also `@name` (a name `context` stays
   `@context['context']`). EPP: each top-level name is a
   parameter. Output is the template's own bytes; EPP output has CRLF turned
-  into LF. `SubprocessTemplate.TIMEOUT` (60 s) bounds a render.
+  into LF. `SubprocessTemplate.TIMEOUT` (60 s) bounds a render: the program
+  runs in its own process group, and a timeout kills it and its children (a
+  `puppet.bat` shim included). Output that is not UTF-8 is decoded with
+  replacement characters. ERB needs Ruby 2.6 or later (ERB's `trim_mode:`
+  keyword); tested with Ruby 4.0 and Puppet 8.10.
 - **Shell**: `%{NAME}` from `DataEncoder.flatten`, matched
   case-insensitively; by default `target.hostname` is `%{TARGET_HOSTNAME}`,
   list items are numbered, `None` renders empty, booleans `true`/`false`, and
@@ -290,14 +294,16 @@ class Template:
 
 - **`register_engine(cls=None, *, priority=None)`** — add an engine and return
   it; bare or as a decorator. `priority` sets `PRIORITY`. Registering a class
-  twice does nothing; a class claiming a suffix another registered engine
-  claims at the same priority raises `ValueError`.
+  twice adds it once (a new `priority` still applies); a class that would
+  claim a suffix another registered engine claims at the same priority raises
+  `ValueError` and changes nothing, the class's `PRIORITY` included.
 - **`unregister_engine(cls) -> bool`** — True if it was registered.
 - **`registered_engines() -> tuple`** — highest `PRIORITY` first.
 - **`by_priority(engines) -> tuple`** — a stable sort by `PRIORITY`.
 - **`ENTRY_POINT_GROUP = "tplx.engines"`** — an installed package registers an
   engine class under it; the group is read once, on first use of the
-  registry. One that fails to load is logged and skipped.
+  registry (a concurrent first use waits for it). One that fails to load is
+  logged and skipped.
 - `DEFAULT_PRIORITY = 0`, `FALLBACK_PRIORITY = -100`, `ANY_SUFFIX = "*"`.
 
 ## Testing an engine (`tplx.testing`)

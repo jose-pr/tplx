@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Iterable, Optional, Tuple
 
 LOGGER = logging.getLogger("tplx")
@@ -22,6 +23,8 @@ ENTRY_POINT_GROUP = "tplx.engines"
 
 _ENGINES: list = []
 _ENTRY_POINTS_LOADED = False
+_ENTRY_POINTS_LOADING = False
+_ENTRY_POINTS_LOCK = threading.RLock()
 
 
 def template_extensions(cls) -> Optional[Tuple[str, ...]]:
@@ -49,9 +52,9 @@ def _priority(cls) -> int:
     return int(getattr(cls, "PRIORITY", DEFAULT_PRIORITY))
 
 
-def _conflict(cls, other) -> bool:
-    """Do two engines claim a suffix in common at the same priority?"""
-    if _priority(cls) != _priority(other):
+def _conflict(cls, priority: int, other) -> bool:
+    """Would `cls` at `priority` claim a suffix `other` claims at the same priority?"""
+    if priority != _priority(other):
         return False
     mine, theirs = template_extensions(cls), template_extensions(other)
     if mine is None or theirs is None:
@@ -63,24 +66,25 @@ def register_engine(cls=None, *, priority: Optional[int] = None):
     """Add an engine to the registry and return it; usable as a decorator.
 
     `priority` overrides the class's `PRIORITY`. Registering a class that is
-    already registered does nothing. A class that claims a suffix another
-    registered engine claims at the same priority raises `ValueError`: give one
-    of them a higher priority to say which wins.
+    already registered does nothing beyond that. A class that would claim a
+    suffix another registered engine claims at the same priority raises
+    `ValueError` and changes nothing: give one of them a higher priority to say
+    which wins.
     """
 
     def _register(cls):
-        if priority is not None:
-            cls.PRIORITY = priority
-        if cls in _ENGINES:
-            return cls
+        wanted = _priority(cls) if priority is None else int(priority)
         for other in _ENGINES:
-            if _conflict(cls, other):
+            if other is not cls and _conflict(cls, wanted, other):
                 raise ValueError(
                     f"{cls.__name__} and {other.__name__} both claim "
                     f"{template_extensions(cls) or 'every suffix'} at priority "
-                    f"{_priority(cls)}; register one with a different priority"
+                    f"{wanted}; register one with a different priority"
                 )
-        _ENGINES.append(cls)
+        if priority is not None:
+            cls.PRIORITY = priority
+        if cls not in _ENGINES:
+            _ENGINES.append(cls)
         return cls
 
     return _register if cls is None else _register(cls)
@@ -109,20 +113,31 @@ def _load_entry_points() -> None:
     """Register the engines installed packages declare, once per process.
 
     One that fails to load is logged and skipped: a broken plugin must not stop
-    every other template from rendering.
+    every other template from rendering. Another thread waits for the load to
+    finish; a plugin that reads the registry while it is imported sees it as
+    it is so far.
     """
-    global _ENTRY_POINTS_LOADED
+    global _ENTRY_POINTS_LOADED, _ENTRY_POINTS_LOADING
     if _ENTRY_POINTS_LOADED:
         return
-    _ENTRY_POINTS_LOADED = True
-    from importlib.metadata import entry_points
-
-    try:
-        found = entry_points(group=ENTRY_POINT_GROUP)
-    except TypeError:  # pragma: no cover - Python 3.9 takes no keyword
-        found = entry_points().get(ENTRY_POINT_GROUP, ())
-    for entry in found:
+    with _ENTRY_POINTS_LOCK:
+        if _ENTRY_POINTS_LOADED or _ENTRY_POINTS_LOADING:
+            return
+        _ENTRY_POINTS_LOADING = True
         try:
-            register_engine(entry.load())
-        except Exception as exc:
-            LOGGER.warning("engine %r could not be registered: %s", entry.name, exc)
+            from importlib.metadata import entry_points
+
+            try:
+                found = entry_points(group=ENTRY_POINT_GROUP)
+            except TypeError:  # pragma: no cover - Python 3.9 takes no keyword
+                found = entry_points().get(ENTRY_POINT_GROUP, ())
+            for entry in found:
+                try:
+                    register_engine(entry.load())
+                except Exception as exc:
+                    LOGGER.warning(
+                        "engine %r could not be registered: %s", entry.name, exc
+                    )
+        finally:
+            _ENTRY_POINTS_LOADING = False
+            _ENTRY_POINTS_LOADED = True

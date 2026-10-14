@@ -144,3 +144,28 @@ def test_an_installed_entry_point_is_registered(monkeypatch):
         "importlib.metadata.entry_points", lambda **kw: [_EntryPoint(), _Broken()]
     )
     assert _Shouty in registered_engines()
+
+
+def test_a_refused_registration_changes_nothing():
+    class Mine(Template):
+        EXT = ".j2"
+        PRIORITY = 3
+
+    with pytest.raises(ValueError):
+        register_engine(Mine, priority=DEFAULT_PRIORITY)
+    assert Mine.PRIORITY == 3 and Mine not in registered_engines()
+
+
+def test_re_registering_at_a_new_priority_is_checked_for_conflicts():
+    class First(Template):
+        EXT = ".twice"
+
+    class Second(Template):
+        EXT = ".twice"
+        PRIORITY = 5
+
+    register_engine(First)
+    register_engine(Second)
+    with pytest.raises(ValueError, match="First and Second"):
+        register_engine(First, priority=5)
+    assert First.PRIORITY == DEFAULT_PRIORITY

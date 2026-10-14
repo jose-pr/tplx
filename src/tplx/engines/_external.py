@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
-from typing import Any, ClassVar, List, Mapping, Optional
+from typing import Any, ClassVar, Dict, List, Mapping, Optional
 
 from .._template import Template
 from ..exceptions import EngineUnavailableError, RenderError, RenderTimeoutError
@@ -21,28 +22,72 @@ from ..exceptions import EngineUnavailableError, RenderError, RenderTimeoutError
 _STDERR_LIMIT = 2000
 
 
+#: Seconds to wait for the pipes to close once a timed-out program is killed.
+_DRAIN_SECONDS = 5
+
+
+def _kill_tree(process: "subprocess.Popen[bytes]") -> None:
+    """Kill `process` and everything it started.
+
+    A program that is a shim (`puppet.bat`, a shell wrapper) runs the real
+    renderer as its child, which would otherwise keep running and hold the
+    output pipes open.
+    """
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    process.kill()
+
+
 def _run(argv: List[str], timeout: float, program: str) -> bytes:
     """Run `argv` with no input and return its standard output.
+
+    The program runs in its own process group, so a timeout kills it and its
+    children.
 
     :raises RenderTimeoutError: it ran longer than `timeout` seconds.
     :raises RenderError: it exited non-zero; the message holds the end of its
         standard error.
     """
-    try:
-        result = subprocess.run(
-            argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RenderTimeoutError(
-            f"{program} did not finish rendering within {timeout}s"
-        ) from exc
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+    group: Dict[str, Any] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
+    with subprocess.Popen(
+        argv,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        **group,
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            _kill_tree(process)
+            try:
+                process.communicate(timeout=_DRAIN_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
+            raise RenderTimeoutError(
+                f"{program} did not finish rendering within {timeout}s"
+            ) from exc
+    if process.returncode != 0:
+        text = stderr.decode("utf-8", errors="replace").strip()
         raise RenderError(
-            f"{program} failed to render the template (exit {result.returncode}): "
-            f"{stderr[-_STDERR_LIMIT:]}"
+            f"{program} failed to render the template (exit {process.returncode}): "
+            f"{text[-_STDERR_LIMIT:]}"
         )
-    return result.stdout
+    return stdout
 
 
 class SubprocessTemplate(Template):

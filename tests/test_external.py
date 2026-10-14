@@ -7,6 +7,7 @@ only the rendering tests need the real programs, and skip visibly without them.
 import json
 import shutil
 import sys
+import time
 
 import pytest
 
@@ -173,3 +174,21 @@ def test_erb_keeps_the_whole_hash_in_context_whatever_the_data_names(tree):
     tree.write("c.erb", "<%= @context['context'] %>|<%= @context.class %>|<%= @n %>")
     rendered = Loader([tree.root]).render("c.erb", context="mine", n=float("nan"))
     assert rendered == "mine|Hash|nan"
+
+
+def test_a_timeout_kills_the_programs_children_too():
+    spawn = (
+        "import subprocess, sys, time; "
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
+        "time.sleep(30)"
+    )
+    engine = _python(ERBTemplate, spawn, TIMEOUT=1)
+    start = time.monotonic()
+    with pytest.raises(RenderTimeoutError):
+        engine("x").render()
+    assert time.monotonic() - start < 10
+
+
+def test_output_that_is_not_utf8_is_decoded_with_replacement_characters():
+    emit = "import sys; sys.stdout.buffer.write(b'a\\xffb')"
+    assert _python(ERBTemplate, emit)("x").render() == "a\ufffdb"
