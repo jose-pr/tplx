@@ -31,6 +31,8 @@ class HandlebarsTemplate(Template):
     other is rendered by its own engine with the template's data and its
     output inserted. Handlebars has **no strict mode**: an
     undefined name renders empty whatever the undefined mode says.
+    As Handlebars specifies, `{{x}}` is **HTML-escaped**; `{{{x}}}` writes the
+    value as it is.
     """
 
     EXT = (".hbs", ".handlebars")

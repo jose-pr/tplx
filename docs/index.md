@@ -31,6 +31,18 @@ text = loader.render("boot.cfg", {"hostname": "web01"}, release="13")
 ...), and the suffix decides which engine renders it. Includes inside it search
 the same roots.
 
+## Each engine keeps its defaults
+
+tplx picks the engine; it does not change how that engine behaves. Write a
+template the way its engine's own documentation says. The difference most
+likely to surprise in a generated file is escaping:
+
+| Engine | A plain value tag writes | For the value as it is |
+| --- | --- | --- |
+| Handlebars | HTML-escaped (`&` is `&amp;`) | `{{{x}}}` |
+| Mustache | HTML-escaped | `{{{x}}}` or `{{& x}}` |
+| Jinja, mako, Liquid, ERB, EPP, shell | the value as it is | — |
+
 ## Learn more
 
 - [API reference](api/reference.md)

@@ -50,6 +50,11 @@ pip install tplx
 
 `.erb` needs `ruby` on `PATH` and `.epp` needs `puppet`; neither has an extra.
 
+Each engine keeps its own syntax and defaults. In particular Handlebars and
+Mustache HTML-escape `{{x}}` (`&` becomes `&amp;`), as their specifications
+say; write `{{{x}}}` for the value as it is. The other engines write values
+unescaped.
+
 ## Quick start
 
 ```python

@@ -215,6 +215,12 @@ rule. Names are root-relative, never relative to the including file.
   `context`, `next`, ...) with a warning.
 - **Liquid, Handlebars, Mustache** read the data through
   `DataEncoder.view`: structures as read-only mappings, lists as lists.
+- **Every engine keeps its own defaults**; tplx does not change them. In
+  particular **Handlebars and Mustache HTML-escape `{{x}}`** (`&` is written
+  `&amp;`), as their specifications say: write `{{{x}}}` (Mustache also
+  `{{& x}}`) for the value as it is, which is what a config file usually
+  wants. Jinja (no autoescape), mako, Liquid, ERB, EPP and the shell engine
+  write values unescaped.
 - **Handlebars, Mustache** cannot fail on an undefined name. Another
   engine's output included in a Mustache template must not contain the bytes
   `\x01` or `\x02`, which delimit it. Under `strict`, a

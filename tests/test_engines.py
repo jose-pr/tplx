@@ -172,6 +172,22 @@ def test_the_logic_less_engines_always_render_an_undefined_name_empty(
     assert Loader([tree.root], undefined=mode).render(name) == "k=[]"
 
 
+@pytest.mark.parametrize(
+    "module, name, source, expected",
+    [
+        ("pybars", "e.hbs", "{{v}}|{{{v}}}", "a&amp;b|a&b"),
+        ("chevron", "e.mustache", "{{v}}|{{{v}}}|{{& v}}", "a&amp;b|a&b|a&b"),
+        ("jinja2", "e.j2", "{{ v }}", "a&b"),
+        ("mako", "e.mako", "${v}", "a&b"),
+        ("liquid", "e.liquid", "{{ v }}", "a&b"),
+    ],
+)
+def test_each_engine_keeps_its_own_escaping(tree, module, name, source, expected):
+    pytest.importorskip(module)
+    tree.write(name, source)
+    assert Loader([tree.root]).render(name, v="a&b") == expected
+
+
 def test_the_package_root_exports_every_shipped_engine():
     names = {cls.__name__ for cls in tplx.registered_engines()}
     assert names <= set(tplx.__all__)

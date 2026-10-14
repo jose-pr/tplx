@@ -34,6 +34,8 @@ class MustacheTemplate(Template):
     found raises `TemplateNotFound`, otherwise it renders empty. chevron has
     **no strict mode for names**: an undefined name renders empty, and under
     `strict` chevron's own warning is turned on so it reaches the log.
+    As Mustache specifies, `{{x}}` is **HTML-escaped**; `{{{x}}}` or `{{& x}}`
+    writes the value as it is.
     """
 
     EXT = (".mustache",)
