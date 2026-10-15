@@ -12,6 +12,7 @@ __all__ = [
     "RenderError",
     "UndefinedError",
     "RenderTimeoutError",
+    "SandboxError",
 ]
 
 
@@ -65,3 +66,8 @@ class UndefinedError(RenderError, NameError):
 
 class RenderTimeoutError(RenderError, TimeoutError):
     """A program-backed engine did not finish within its timeout."""
+
+
+class SandboxError(TplxError):
+    """The sandbox refused: an engine that cannot be sandboxed, or something a
+    sandboxed engine does not allow (an unsafe attribute, a method call)."""

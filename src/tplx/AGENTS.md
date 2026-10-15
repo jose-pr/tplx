@@ -23,12 +23,13 @@ needs `puppet` on `PATH`.
 Templates and their roots are trusted, in every engine alike: Jinja and
 mako run Python, ERB and EPP run Ruby and Puppet. What tplx guards is the
 template **name**: one that would leave the search paths (`..`, a backslash,
-a drive) is refused.
+a drive) is refused. For untrusted templates, opt in to the sandbox
+(`Loader(sandbox=True)`, see "Untrusted templates").
 
 ## Loading and rendering (`tplx`)
 
 ```python
-Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None, configure=None)
+Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None, configure=None, sandbox=False)
 ```
 
 Finds templates under `roots` and renders them with the engine each needs.
@@ -51,8 +52,9 @@ order) and `Candidates = Callable[[str], Iterable[str]]`.
   that engine's own environment when a lookup builds it, for the class and its
   subclasses (see "Configuring an engine"). Anything but a class mapped to a
   callable raises `TypeError`.
+- `sandbox`: render untrusted templates (see "Untrusted templates").
 - Attributes: `roots`, `engines` (tuple), `undefined`, `globals` (dict),
-  `encoder`, `configure` (dict).
+  `encoder`, `configure` (dict), `sandbox`.
 
 **Resolution**: a name may hold directories (`debian/boot`), separated by
 `/`. A name with a `..` segment, a backslash, a NUL or a drive (`C:/x`,
@@ -142,6 +144,8 @@ are not UTF-8 raise `NoEngineError`.
 class Include(NamedTuple): source: Source; engine: type; text: str | None
 ```
 
+- `Lookup.evaluate(...)`, `Lookup.compile(...)`: as on `Loader` (below),
+  with this lookup's search order for a string template's includes.
 - `Lookup.search_paths() -> list`: the directories searched, in order.
 - `Lookup.clear()`: forget the compiled templates and engine state.
 - `Lookup.state(key, factory)`: per-lookup state an engine builds once (its
@@ -155,6 +159,67 @@ class Source(NamedTuple): data: bytes; name: str; origin: str; uptodate: Callabl
 A file as found: its bytes, the file name found, its path or URI as text, and
 a check that is true while it is unchanged.
 
+## Expressions and string templates (`tplx`)
+
+```python
+evaluate(expression, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
+Loader.evaluate(expression, context=None, /, *, engine=None, **overrides) -> Any
+Loader.compile(source, *, engine=None, name="<string>") -> Template
+DEFAULT_ENGINE: EngineChoice = PYTHON   # "python"
+```
+
+- `evaluate` gives the **value** of an expression in an engine's own syntax,
+  its type kept: `evaluate("a.b * 2", ctx, engine="jinja")` is `42`, not
+  `"42"`. Its names are the loader's `globals`, then `context`, then
+  `overrides`. `tplx.evaluate` uses a cached loader that reads no file;
+  `Loader.evaluate` brings that loader's mode, sandbox, globals and
+  `configure`.
+- `engine` (`EngineChoice`) is an engine class, its name or one of its
+  suffixes (`"jinja"`, `".j2"`, `"go"`, `"tmpl"`), or `"python"`; unknown
+  raises `ValueError`. When omitted, `tplx.DEFAULT_ENGINE`, which a program
+  may set; it starts as `"python"`: Python's own `eval` with the names as
+  globals (trusted like every engine; a sandbox raises `SandboxError` for it;
+  a missing name is `UndefinedError`).
+- Syntax per engine: Jinja an expression with filters (`xs | sort`); Liquid
+  the same (`a.b | times: 2`); Go a pipeline (`index .m "k"`); Handlebars a
+  path or helper call; Mustache a dotted name (`.` for the whole data); mako
+  a Python expression; Cheetah a Cheetah one (`$a.b * 2`); shell and envsubst
+  what goes between the braces (`HOST:-x`), giving text. ERB, EPP and copy
+  raise `NotImplementedError`.
+- `compile` compiles `source` with `engine` (a template engine; `"python"`
+  raises `ValueError`) and caches it per lookup by engine, source and name, at
+  most `STRING_CACHE_SIZE` (256). Its includes resolve through the lookup.
+- `Template.references() -> frozenset[str]`: the top-level names a template
+  reads — Jinja, Liquid, Mustache, shell, envsubst; others raise
+  `NotImplementedError`.
+
+## Untrusted templates (`Loader(sandbox=True)`)
+
+The sandbox is for template and expression **text** written by someone you
+do not trust. The data, `globals` and `configure` functions stay trusted.
+
+- Only engines whose class sets `SANDBOXED = True` take part: Jinja (built as
+  Jinja's `SandboxedEnvironment`), Liquid, Mustache, Handlebars, Go (a gotpl
+  `SandboxPolicy` allowing only the configured functions, the data through
+  `DataView`, so no method can be called), shell, envsubst and copy. mako,
+  Cheetah, ERB and EPP cannot be sandboxed.
+- A file whose suffix another engine claims raises `SandboxError` **before
+  it is read**, and so does an include of one; `evaluate` and `compile`
+  with such an engine, or with `"python"`, raise it too.
+- An unsafe access inside a sandboxed engine (Jinja's `''.__class__`, a
+  gotpl policy refusal) raises `SandboxError`.
+- The data reaches a sandboxed template **plain**: `str`, numbers, `bool`,
+  `None` and `bytes` as they are (`DataEncoder.PLAIN`), mappings and objects
+  as read-only views with their methods hidden, lists as lists, any other
+  value (a path, an address) as its text. A function the caller puts in the
+  data or `globals` stays callable.
+- The sandbox limits what a template can **reach**, not what it **costs**: a
+  template can still loop or write a lot (Jinja's sandbox caps `range()` at
+  100,000 items). Bound time and memory around the render (a worker process,
+  a timeout) when that matters.
+- A third-party engine opts in by setting `SANDBOXED = True` — a promise that
+  its templates cannot reach beyond the data given.
+
 ## Presenting data (`tplx`)
 
 Jinja and mako receive the data as it is. The other engines receive it
@@ -165,7 +230,7 @@ through the loader's `DataEncoder`, which a subclass changes the way a
 DataEncoder(*, expose=(), max_depth=8)
 ```
 
-- `view(values) -> dict` — for Liquid, Handlebars, Mustache: a structure
+- `view(values, *, plain=False) -> dict` — for Liquid, Handlebars, Mustache: a structure
   becomes a `DataView` (a lazy, read-only `Mapping` of its items or
   attributes; dunder names hidden), a list stays a list, a value as it is.
 - `json(values)` — for ERB, EPP: a JSON-serialisable copy; a value that is not
@@ -194,7 +259,11 @@ The hooks to override:
   addresses and networks, `os.PathLike`.
 
 Also: `structure(value)` (a value as a `Mapping`, a `list` or a value) and
-`wrap(value)` (one value as `view` presents it).
+`wrap(value, *, plain=False)` (one value as `view` presents it).
+`view(values, *, plain=True)` and `wrap(..., plain=True)` are what a sandbox
+uses: an object's methods hidden, and a value not in **`PLAIN`** (`str`,
+`bytes`, `bool`, `int`, `float`, `complex`, `None`; a class attribute a
+subclass may change) given as its text.
 
 ## Includes
 
@@ -348,11 +417,17 @@ class Template:
     EXT: None | str | tuple[str, ...] = ()   # () none, None or "*" every suffix
     PRIORITY: int = DEFAULT_PRIORITY         # 0; FALLBACK_PRIORITY is -100
     BINARY: bool = False                     # True: receive and return bytes
+    SANDBOXED: bool = False                  # True: safe for untrusted templates
     def __init__(self, source, *, lookup=None, origin="<string>"): ...
     def render(self, data=None, /, **overrides) -> str | bytes: ...
     def render_values(self, values: Mapping) -> str | bytes: ...  # implement this
     @classmethod
     def can_process(cls, file, source) -> bool: ...
+    @classmethod
+    def evaluate(cls, expression, values, *, lookup=None) -> Any: ...  # optional
+    def references(self) -> frozenset[str]: ...                      # optional
+    @classmethod
+    def configured(cls, lookup, native) -> Any: ...
 ```
 
 - An engine implements `render_values`; `render` merges `data` and
@@ -360,7 +435,10 @@ class Template:
   (its `__cause__`). A template built without a `lookup` renders `strict` and
   has no includes.
 - Attributes: `source`, `lookup`, `origin`, `undefined` (the mode),
-  `is_up_to_date`.
+  `sandbox`, `is_up_to_date`.
+- `evaluate` and `references` raise `NotImplementedError` unless an engine
+  implements them. `configured(lookup, native)` is `configure_native` for a
+  class, what an engine's `evaluate` uses without an instance.
 - `can_process` defaults to `can_process_suffix(cls, file)`: is `file`'s
   suffix (a path or a file name) in `template_extensions(cls)`?
 - `template_extensions(cls) -> tuple[str, ...] | None`: `EXT` normalised to
@@ -414,6 +492,8 @@ All in `tplx.exceptions`, all re-exported from `tplx`.
 - `UndefinedError(RenderError, NameError)` — a missing name under `strict`.
 - `RenderTimeoutError(RenderError, TimeoutError)` — a program-backed engine
   ran past its timeout.
+- `SandboxError(TplxError)` — a sandboxed loader refused an engine, or a
+  sandboxed engine refused an access.
 
 ## Command line
 

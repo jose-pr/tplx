@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextvars import ContextVar
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
+from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 
 #: The data of the render in progress, for another engine's `#include`.
 _VALUES: "ContextVar[Mapping[str, Any]]" = ContextVar("tplx_cheetah_values")
@@ -112,6 +114,45 @@ class CheetahTemplate(Template):
 
     EXT = (".cheetah",)
 
+    @classmethod
+    def bridge(cls, lookup: "Optional[Lookup]" = None) -> Tuple[type, str]:
+        """The Cheetah base class `lookup`'s templates compile with, and its prefix."""
+        mode = lookup.loader.undefined if lookup is not None else "strict"
+
+        def factory() -> Tuple[type, str]:
+            return _bridge(lookup, cls, mode, cls.configured(lookup, {}))
+
+        if lookup is None:
+            return factory()
+        return lookup.state(("cheetah", cls, mode), factory)
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """A Cheetah expression (`$a.b * 2`), its value's type kept."""
+        _, _, not_found = _cheetah()
+        bridge, prefix = cls.bridge(lookup)
+        source = "%s$%s(%s)" % (prefix, CAPTURE_NAME, expression)
+        build = lambda: bridge.compile(source=source)  # noqa: E731
+        if lookup is None:
+            compiled = build()
+        else:
+            cache = lookup.state(("cheetah-expressions", cls), OrderedDict)
+            compiled = cached(cache, expression, build)
+        names = dict(values)
+        names[CAPTURE_NAME] = capture
+        with capturing() as box:
+            try:
+                str(compiled(searchList=[names]))
+            except not_found as exc:
+                raise UndefinedError(f"{expression!r}: {exc}") from exc
+        return captured(box)
+
     def __init__(
         self,
         source: str,
@@ -121,17 +162,7 @@ class CheetahTemplate(Template):
     ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
         _, _, self._not_found = _cheetah()
-        mode = self.undefined
-
-        def factory() -> Tuple[type, str]:
-            settings = self.configure_native({})
-            return _bridge(lookup, type(self), mode, settings)
-
-        bridge, prefix = (
-            lookup.state(("cheetah", type(self), mode), factory)
-            if lookup is not None
-            else factory()
-        )
+        bridge, prefix = type(self).bridge(lookup)
         self._class = bridge.compile(source=prefix + source)
 
     def render_values(self, values: "Mapping[str, Any]") -> str:

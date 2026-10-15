@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
 from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError
+from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 from ._partials import Partials
 
 LOGGER = logging.getLogger("tplx")
@@ -39,6 +41,37 @@ class HandlebarsTemplate(Template):
     """
 
     EXT = (".hbs", ".handlebars")
+    SANDBOXED = True
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """A Handlebars expression (`a.b`, `helper arg`), its value's type kept."""
+        source = "{{%s %s}}" % (CAPTURE_NAME, expression)
+        build = lambda: _pybars()().compile(source)  # noqa: E731
+        if lookup is None:
+            template, helpers = build(), {}
+            data = dict(values)
+        else:
+            cache = lookup.state(("handlebars-expressions", cls), OrderedDict)
+            template = cached(cache, expression, build)
+            helpers = dict(
+                lookup.state(
+                    ("handlebars-helpers", cls), lambda: cls.configured(lookup, {})
+                )
+            )
+            data = lookup.loader.encoder.view(values, plain=lookup.loader.sandbox)
+        helpers[CAPTURE_NAME] = lambda this, value=None, *rest, **keywords: capture(
+            value
+        )
+        with capturing() as box:
+            template(data, helpers=helpers)
+        return captured(box)
 
     def __init__(
         self,
@@ -85,7 +118,9 @@ class HandlebarsTemplate(Template):
         )
         return "".join(
             self._template(
-                self.encoder.view(values), helpers=helpers, partials=partials
+                self.encoder.view(values, plain=self.sandbox),
+                helpers=helpers,
+                partials=partials,
             )
         )
 

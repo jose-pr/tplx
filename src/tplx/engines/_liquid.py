@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 from contextvars import ContextVar
-from typing import Any, Mapping, Optional
+from collections import OrderedDict
+from typing import Any, FrozenSet, Mapping, Optional
 
 from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
+from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 
 
 def _liquid():
@@ -66,7 +68,9 @@ def _environment(liquid, TemplateSource, lookup, engine: type, mode: str):
         "lenient": liquid.Undefined,
         "debug": liquid.DebugUndefined,
     }[mode]
-    return liquid.Environment(loader=_LookupLoader(), undefined=undefined)
+    environment = liquid.Environment(loader=_LookupLoader(), undefined=undefined)
+    environment.filters[CAPTURE_NAME] = capture
+    return environment
 
 
 class LiquidTemplate(Template):
@@ -76,10 +80,67 @@ class LiquidTemplate(Template):
     as read-only mappings of their attributes. `{% include %}` and
     `{% render %}` resolve through the `Lookup` that loaded the file, exactly
     as a render would: a Liquid file is parsed by Liquid, any other is rendered
-    by its own engine with the render's data and its output inserted. All three undefined modes apply.
+    by its own engine with the render's data and its output inserted. All
+    three undefined modes apply. `evaluate` takes a Liquid expression with its
+    filters (`xs | sort`).
     """
 
     EXT = (".liquid",)
+    SANDBOXED = True
+
+    @classmethod
+    def environment(cls, lookup: "Optional[Lookup]" = None) -> Any:
+        """The Liquid environment `lookup`'s templates share."""
+        liquid, TemplateSource = _liquid()
+        mode = lookup.loader.undefined if lookup is not None else "strict"
+
+        def factory():
+            return cls.configured(
+                lookup, _environment(liquid, TemplateSource, lookup, cls, mode)
+            )
+
+        if lookup is None:
+            return factory()
+        return lookup.state(("liquid", cls, mode), factory)
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        liquid, _ = _liquid()
+        environment = cls.environment(lookup)
+        source = "{{ %s | %s }}" % (expression, CAPTURE_NAME)
+        build = lambda: environment.from_string(source)  # noqa: E731
+        if lookup is None:
+            template = build()
+        else:
+            cache = lookup.state(("liquid-expressions", cls), OrderedDict)
+            template = cached(cache, expression, build)
+        encoder = lookup.loader.encoder if lookup is not None else None
+        data = (
+            encoder.view(values, plain=lookup.loader.sandbox)
+            if encoder is not None
+            else dict(values)
+        )
+        with capturing() as box:
+            try:
+                template.render(**data)
+            except liquid.exceptions.UndefinedError as exc:
+                raise UndefinedError(f"{expression!r}: {exc}") from exc
+        # An undefined name reaches the filter as Liquid's Undefined; type() so
+        # a StrictUndefined is not touched.
+        if box and issubclass(type(box[0]), liquid.Undefined):
+            if lookup is None or lookup.loader.undefined == "strict":
+                raise UndefinedError(f"{expression!r} is undefined")
+            return None
+        return captured(box)
+
+    def references(self) -> FrozenSet[str]:
+        return frozenset(str(name) for name in self._template.global_variables())
 
     def __init__(
         self,
@@ -89,23 +150,16 @@ class LiquidTemplate(Template):
         origin: str = "<string>",
     ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
-        liquid, TemplateSource = _liquid()
-        self._liquid = liquid
-        mode = self.undefined
-        key = ("liquid", type(self), mode)
-
-        def factory():
-            return self.configure_native(
-                _environment(liquid, TemplateSource, lookup, type(self), mode)
-            )
-
-        environment = lookup.state(key, factory) if lookup is not None else factory()
+        self._liquid, _ = _liquid()
+        environment = type(self).environment(lookup)
         self._template = environment.from_string(source, name=origin)
 
     def render_values(self, values: "Mapping[str, Any]") -> str:
         token = _VALUES.set(values)
         try:
-            return self._template.render(**self.encoder.view(values))
+            return self._template.render(
+                **self.encoder.view(values, plain=self.sandbox)
+            )
         except self._liquid.exceptions.UndefinedError as exc:
             raise UndefinedError(f"{self.origin}: {exc}") from exc
         except self._liquid.exceptions.TemplateNotFoundError as exc:

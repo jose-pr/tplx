@@ -9,12 +9,16 @@ from ._encoder import DataEncoder, DataView
 from ._loader import (
     DEFAULT_ROOT,
     LOOKUP_CACHE_SIZE,
+    PYTHON,
+    STRING_CACHE_SIZE,
     Candidates,
+    EngineChoice,
     Include,
     Loader,
     Lookup,
     Names,
     Source,
+    evaluate,
 )
 from ._registry import (
     ANY_SUFFIX,
@@ -48,10 +52,16 @@ from .exceptions import (
     NoEngineError,
     RenderError,
     RenderTimeoutError,
+    SandboxError,
     TemplateNotFound,
     TplxError,
     UndefinedError,
 )
+
+#: The engine `evaluate` and `compile` use when given none: an engine
+#: class, name or suffix, or `"python"` (Python's own `eval`, refused by a
+#: sandbox). Set it to change the default for the whole process.
+DEFAULT_ENGINE: "EngineChoice" = PYTHON
 
 try:
     __version__ = _version("tplx")
@@ -67,8 +77,13 @@ __all__ = [
     "Include",
     "DEFAULT_ROOT",
     "LOOKUP_CACHE_SIZE",
+    "STRING_CACHE_SIZE",
+    "PYTHON",
+    "DEFAULT_ENGINE",
+    "evaluate",
     "Names",
     "Candidates",
+    "EngineChoice",
     "DataEncoder",
     "DataView",
     # the engine contract and registry
@@ -106,4 +121,5 @@ __all__ = [
     "RenderError",
     "UndefinedError",
     "RenderTimeoutError",
+    "SandboxError",
 ]

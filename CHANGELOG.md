@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `Loader(sandbox=True)` for untrusted templates: only engines with
+  `SANDBOXED = True` take part (Jinja through `SandboxedEnvironment`, Liquid,
+  Mustache, Handlebars, Go through a gotpl `SandboxPolicy`, shell, envsubst,
+  copy); a file another engine claims raises `SandboxError` before it is read.
+  A sandboxed template sees plain data: no method of the caller's objects, and
+  a value that is not a plain type as its text.
+- `tplx.evaluate` and `Loader.evaluate`: an expression's value, its type kept,
+  in Python (`DEFAULT_ENGINE`, refused by a sandbox) or an engine's syntax
+  (`engine="jinja"`, `".liquid"`, `"go"`, ...), through `Template.evaluate`.
+- `Loader.compile`, cached; `Template.references()`, the names a template
+  reads.
+
 ## [0.1.3] - 2026-10-15
 
 ### Added

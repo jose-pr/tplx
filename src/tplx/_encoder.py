@@ -29,14 +29,17 @@ class DataView(Mapping):
 
     Nothing is copied, so a view never goes stale against what it wraps. Values
     are presented through the encoder that made the view. Dunder names are
-    hidden; a single leading underscore is not.
+    hidden; a single leading underscore is not. A `plain` view (a sandbox's)
+    also hides an object's methods and gives other values as `wrap(...,
+    plain=True)` does.
     """
 
-    __slots__ = ("_obj", "_encoder")
+    __slots__ = ("_obj", "_encoder", "_plain")
 
-    def __init__(self, obj: Any, encoder: "DataEncoder") -> None:
+    def __init__(self, obj: Any, encoder: "DataEncoder", plain: bool = False) -> None:
         object.__setattr__(self, "_obj", obj)
         object.__setattr__(self, "_encoder", encoder)
+        object.__setattr__(self, "_plain", plain)
 
     def _raw(self, key: str) -> Any:
         obj = object.__getattribute__(self, "_obj")
@@ -45,12 +48,17 @@ class DataView(Mapping):
         if not isinstance(key, str) or key.startswith("__"):
             raise KeyError(key)
         try:
-            return getattr(obj, key)
+            value = getattr(obj, key)
         except AttributeError as exc:
             raise KeyError(key) from exc
+        if object.__getattribute__(self, "_plain") and callable(value):
+            raise KeyError(key)  # a method: not data
+        return value
 
     def __getitem__(self, key: str) -> Any:
-        return object.__getattribute__(self, "_encoder").wrap(self._raw(key))
+        encoder = object.__getattribute__(self, "_encoder")
+        plain = object.__getattribute__(self, "_plain")
+        return encoder.wrap(self._raw(key), plain=plain)
 
     def __iter__(self) -> Iterator[str]:
         obj = object.__getattribute__(self, "_obj")
@@ -133,6 +141,18 @@ class DataEncoder:
         os.PathLike,
     )
 
+    #: Values a sandbox passes to a template as they are; any other value (an
+    #: address, a path, an object with its own text) is passed as its text.
+    PLAIN: ClassVar[Tuple[type, ...]] = (
+        str,
+        bytes,
+        bool,
+        int,
+        float,
+        complex,
+        type(None),
+    )
+
     def __init__(self, *, expose: "Iterable[str]" = (), max_depth: int = 8) -> None:
         self.expose = frozenset(expose)
         self.max_depth = max_depth
@@ -177,20 +197,33 @@ class DataEncoder:
             return list(value)
         return self.default(value)
 
-    def wrap(self, value: Any) -> Any:
-        """`value` for a data template: a view for a structure, a value as it is."""
+    def wrap(self, value: Any, *, plain: bool = False) -> Any:
+        """`value` for a data template: a view for a structure, a value as it is.
+
+        `plain` (a sandbox's): a value that is not in `PLAIN` reaches the template
+        as its text, so none of its methods do; a callable the caller put in
+        the data stays callable, but an object's methods are hidden.
+        """
         found = self.structure(value)
         if isinstance(found, DataView):
+            if plain and not object.__getattribute__(found, "_plain"):
+                return DataView(object.__getattribute__(found, "_obj"), self, True)
             return found
         if isinstance(found, Mapping):
-            return DataView(found, self)
+            return DataView(found, self, plain)
         if isinstance(found, list):
-            return [self.wrap(item) for item in found]
+            return [self.wrap(item, plain=plain) for item in found]
+        if plain and not isinstance(found, self.PLAIN) and not callable(found):
+            return str(found)
         return found
 
-    def view(self, values: "Mapping[str, Any]") -> Dict[str, Any]:
-        """The top-level names of a data template."""
-        return {str(key): self.wrap(value) for key, value in values.items()}
+    def view(
+        self, values: "Mapping[str, Any]", *, plain: bool = False
+    ) -> Dict[str, Any]:
+        """The top-level names of a data template; `plain` in a sandbox."""
+        return {
+            str(key): self.wrap(value, plain=plain) for key, value in values.items()
+        }
 
     def _items(self, mapping: "Mapping[Any, Any]") -> Iterator[Tuple[str, Any]]:
         """`mapping`'s items by name, without the `_`-prefixed names `expose` does not list.

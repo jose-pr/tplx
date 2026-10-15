@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import re
+from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .._loader import Lookup
 from .._template import Template
+from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 from ..exceptions import (
     EngineUnavailableError,
+    SandboxError,
     TemplateNotFound,
     TplxError,
     UndefinedError,
@@ -74,8 +77,74 @@ class GoTemplate(Template):
     """
 
     EXT = (".tmpl", ".gotmpl")
+    SANDBOXED = True
     #: The action delimiters, as Go's `Delims`.
     DELIMITERS: Tuple[str, str] = ("{{", "}}")
+
+    @classmethod
+    def _environment(
+        cls, lookup: "Optional[Lookup]", functions: Dict[str, Callable[..., Any]]
+    ) -> Any:
+        """A gotpl environment with `functions`; in a sandbox, a policy that
+        allows those functions and no attribute or method of an object."""
+        gotpl = _gotpl()
+        mode = lookup.loader.undefined if lookup is not None else "strict"
+        sandbox = None
+        if lookup is not None and lookup.loader.sandbox:
+            sandbox = gotpl.SandboxPolicy(allow_functions=functions)
+        return gotpl.Environment(
+            functions=functions,
+            delimiters=cls.DELIMITERS,
+            missing_key=_MISSING_KEY[mode],
+            sandbox=sandbox,
+        )
+
+    @classmethod
+    def _data(cls, lookup: "Optional[Lookup]", values: "Mapping[str, Any]") -> Any:
+        """The data as gotpl reads it: in a sandbox, through `DataView`, which
+        has no methods to call."""
+        if lookup is not None and lookup.loader.sandbox:
+            return lookup.loader.encoder.view(values, plain=True)
+        return dict(values)
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """A Go pipeline (`.a.b`, `index .m "k"`, `printf "%d" .n`), its value's type kept."""
+        gotpl = _gotpl()
+        left, right = cls.DELIMITERS
+        source = f"{left}{CAPTURE_NAME} ({expression}){right}"
+
+        def build() -> Any:
+            functions = (
+                dict(
+                    lookup.state(
+                        ("go-functions", cls), lambda: cls.configured(lookup, {})
+                    )
+                )
+                if lookup is not None
+                else {}
+            )
+            functions[CAPTURE_NAME] = capture
+            return cls._environment(lookup, functions).from_string(source)
+
+        if lookup is None:
+            template = build()
+        else:
+            cache = lookup.state(("go-expressions", cls), OrderedDict)
+            template = cached(cache, expression, build)
+        with capturing() as box:
+            try:
+                template.render(cls._data(lookup, values))
+            except gotpl.TemplateExecutionError as exc:
+                _translate(gotpl, exc, repr(expression))
+                raise
+        return captured(box)
 
     def __init__(
         self,
@@ -96,11 +165,7 @@ class GoTemplate(Template):
         self._checks: List[Callable[[], bool]] = []
         sources = {origin: source}
         self._collect(source, sources)
-        environment = gotpl.Environment(
-            functions=functions,
-            delimiters=self.DELIMITERS,
-            missing_key=_MISSING_KEY[self.undefined],
-        )
+        environment = type(self)._environment(lookup, functions)
         self._root = origin
         self._engine = environment.from_sources(sources)
 
@@ -153,11 +218,21 @@ class GoTemplate(Template):
     def render_values(self, values: "Mapping[str, Any]") -> str:
         gotpl = self._gotpl
         try:
-            return self._engine.render_template(self._root, dict(values))
+            return self._engine.render_template(
+                self._root, type(self)._data(self.lookup, values)
+            )
         except gotpl.TemplateExecutionError as exc:
-            cause = exc.__cause__
-            if isinstance(cause, TplxError):
-                raise cause from None
-            if "missing key" in str(exc):
-                raise UndefinedError(f"{self.origin}: {exc}") from exc
+            _translate(gotpl, exc, self.origin)
             raise
+
+
+def _translate(gotpl: Any, exc: Exception, where: str) -> None:
+    """Raise gotpl's execution error as tplx's: a tplx error it carries, a
+    sandbox refusal, a missing key under `strict`; return for anything else."""
+    cause = exc.__cause__
+    if isinstance(cause, TplxError):
+        raise cause from None
+    if isinstance(exc, gotpl.SandboxViolationError):
+        raise SandboxError(f"{where}: {exc}") from exc
+    if "missing key" in str(exc):
+        raise UndefinedError(f"{where}: {exc}") from exc

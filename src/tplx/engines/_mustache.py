@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping as _Mapping
+from typing import Any, FrozenSet, Mapping, Optional
 
 from .._loader import Lookup
 from .._template import Template
-from ..exceptions import EngineUnavailableError
+from .._encoder import unwrap
+from ..exceptions import EngineUnavailableError, UndefinedError
 from ._partials import Partials
 
 LOGGER = logging.getLogger("tplx")
@@ -43,6 +45,45 @@ class MustacheTemplate(Template):
     """
 
     EXT = (".mustache",)
+    SANDBOXED = True
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """A Mustache name (`a.b`, `.` for the whole data): the value it names."""
+        current: Any = (
+            lookup.loader.encoder.view(values, plain=lookup.loader.sandbox)
+            if lookup is not None
+            else dict(values)
+        )
+        path = expression.strip()
+        if path != ".":
+            for part in path.split("."):
+                if isinstance(current, _Mapping) and part in current:
+                    current = current[part]
+                    continue
+                if lookup is None or lookup.loader.undefined == "strict":
+                    raise UndefinedError(f"{expression!r}: {part!r} is undefined")
+                return None
+        return unwrap(current)
+
+    def references(self) -> FrozenSet[str]:
+        names = set()
+        depth = 0
+        for tag, key in self._chevron.tokenizer.tokenize(self.source):
+            if tag in ("variable", "no escape", "section", "inverted section"):
+                if depth == 0 and key != ".":
+                    names.add(key.split(".")[0])
+            if tag in ("section", "inverted section"):
+                depth += 1
+            elif tag == "end":
+                depth -= 1
+        return frozenset(names)
 
     def __init__(
         self,
@@ -77,7 +118,7 @@ class MustacheTemplate(Template):
         )
         return self._chevron.render(
             self.source,
-            self.encoder.view(values),
+            self.encoder.view(values, plain=self.sandbox),
             partials_path=None,
             partials_dict=partials,
         )

@@ -6,6 +6,8 @@ import logging
 import re
 from typing import Any, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple, Union
 
+from .._loader import Lookup
+
 from .._template import Template
 from ..exceptions import UndefinedError
 
@@ -218,6 +220,7 @@ class ShellTemplate(Template):
     """
 
     EXT: ClassVar[Union[None, str, Tuple[str, ...]]] = (".shtpl",)
+    SANDBOXED = True
     #: What introduces a placeholder. Doubling it escapes it (`escape`).
     DELIMITER: ClassVar[str] = "%"
     #: One of `PATTERNS`: `braced` for `%{NAME}` only, `unbraced` for `%NAME`
@@ -276,6 +279,34 @@ class ShellTemplate(Template):
         compiled = re.compile(delimiter + "(?:" + "|".join(alternatives) + ")")
         cls._compiled_pattern = compiled
         return compiled
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """What goes between the braces (`HOST`, `HOST:-x`, `PATH//:/ `), as text.
+
+        :raises ValueError: an expression this syntax does not know.
+        """
+        template = cls("", lookup=lookup)
+        whole = f"{cls.DELIMITER}{{{expression}}}"
+        found = template._braced(expression, whole, template.variables(values))
+        if found is None:
+            raise ValueError(f"{cls.__name__} does not know {whole!r}")
+        return found
+
+    def references(self) -> FrozenSet[str]:
+        """The placeholder names this template reads, as written."""
+        names = set()
+        for match in self.pattern().finditer(self.source):
+            name = match.group("braced") or match.groupdict().get("named")
+            if name:
+                names.add(name)
+        return frozenset(names)
 
     def variables(self, values: "Mapping[str, Any]") -> Dict[str, str]:
         """`values` as the placeholders read them: the encoder's `flatten`, by UPPER name."""

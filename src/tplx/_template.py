@@ -8,6 +8,7 @@ from typing import (
     Any,
     Callable,
     ClassVar,
+    FrozenSet,
     Mapping,
     Optional,
     Tuple,
@@ -62,6 +63,9 @@ class Template:
     #: True to receive the file's raw `bytes` and return `bytes`; False to
     #: receive UTF-8-decoded text.
     BINARY: ClassVar[bool] = False
+    #: True when a template cannot reach beyond the data it is given, so a
+    #: `Loader(sandbox=True)` may use this engine for untrusted templates.
+    SANDBOXED: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -81,6 +85,11 @@ class Template:
         return self.lookup.loader.undefined if self.lookup is not None else "strict"
 
     @property
+    def sandbox(self) -> bool:
+        """Does this template render in a sandbox (its loader's `sandbox`)?"""
+        return self.lookup is not None and self.lookup.loader.sandbox
+
+    @property
     def encoder(self) -> "DataEncoder":
         """The `DataEncoder` this template presents its data with."""
         if self.lookup is not None:
@@ -94,9 +103,14 @@ class Template:
         lookup; every function whose key is this engine's class or a base of it
         runs, in the order given. Returns `native`.
         """
-        if self.lookup is not None:
-            for cls, function in self.lookup.loader.configure.items():
-                if isinstance(self, cls):
+        return type(self).configured(self.lookup, native)
+
+    @classmethod
+    def configured(cls, lookup: "Optional[Lookup]", native: Any) -> Any:
+        """`configure_native` for a class: what `evaluate` uses without an instance."""
+        if lookup is not None:
+            for key, function in lookup.loader.configure.items():
+                if issubclass(cls, key):
                     function(native)
         return native
 
@@ -128,6 +142,30 @@ class Template:
     def render_values(self, values: "Mapping[str, Any]") -> "Union[str, bytes]":
         """What an engine implements: render with `values` as the top-level names."""
         raise NotImplementedError
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """The value of `expression`, in this engine's own syntax, over `values`.
+
+        The value keeps its type (`a.b * 2` is `42`, not `"42"`). `lookup`
+        brings the loader's undefined mode, sandbox and `configure`.
+
+        :raises NotImplementedError: this engine has no expressions.
+        """
+        raise NotImplementedError(f"{cls.__name__} cannot evaluate an expression")
+
+    def references(self) -> FrozenSet[str]:
+        """The top-level names this template reads from its data.
+
+        :raises NotImplementedError: this engine cannot tell.
+        """
+        raise NotImplementedError(f"{type(self).__name__} cannot list its references")
 
     @classmethod
     def can_process(cls, file: Any, source: "Union[str, bytes]") -> bool:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import builtins
 import os
 import pathlib
+import sys
 from collections import OrderedDict
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import (
@@ -26,7 +28,14 @@ from . import _template
 from ._registry import FALLBACK_PRIORITY, by_priority, template_extensions
 from ._encoder import DataEncoder, unwrap
 from ._template import UNDEFINED_MODES, Template, can_process_suffix
-from .exceptions import NoEngineError, RenderError, TemplateNotFound, TplxError
+from .exceptions import (
+    NoEngineError,
+    RenderError,
+    SandboxError,
+    TemplateNotFound,
+    TplxError,
+    UndefinedError,
+)
 
 #: Where templates are looked for when a `Loader` is given no root.
 DEFAULT_ROOT = "templates"
@@ -39,6 +48,17 @@ Names = Union[str, Sequence[str]]
 
 #: How many `Lookup`s a `Loader` keeps for reuse; the least recently used goes.
 LOOKUP_CACHE_SIZE = 64
+
+#: How many string templates a `Lookup` keeps compiled, by engine and source.
+STRING_CACHE_SIZE = 256
+
+#: The built-in expression engine's name: Python's own `eval`. It is trusted,
+#: like every engine, and a sandbox refuses it.
+PYTHON = "python"
+
+#: An engine class, or an engine's name or suffix (`"jinja"`, `".j2"`, `"go"`),
+#: or `PYTHON`.
+EngineChoice = Union[type, str]
 
 
 def _escapes(name: str) -> bool:
@@ -133,6 +153,66 @@ def _claimed_priority(entry, engines: "Sequence[type]") -> int:
     return FALLBACK_PRIORITY - 1
 
 
+def _default_engine() -> EngineChoice:
+    """`tplx.DEFAULT_ENGINE`, read when it is needed so a caller can set it."""
+    package = sys.modules.get(__package__ or "tplx")
+    return getattr(package, "DEFAULT_ENGINE", PYTHON)
+
+
+def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> EngineChoice:
+    """The engine class (or `PYTHON`) that `engine` names among `engines`.
+
+    :raises ValueError: no engine has that name or suffix.
+    """
+    if isinstance(engine, type):
+        return engine
+    if not isinstance(engine, str):
+        raise TypeError(f"an engine is a class or a name, not {engine!r}")
+    word = engine.lower().lstrip(".")
+    if word == PYTHON:
+        return PYTHON
+    known = [PYTHON]
+    for cls in engines:
+        name = cls.__name__.lower()
+        if name.endswith("template") and name != "template":
+            name = name[: -len("template")]
+        names = [
+            name,
+            *(suffix.lstrip(".") for suffix in template_extensions(cls) or ()),
+        ]
+        if word in names:
+            return cls
+        known.append(name)
+    raise ValueError(f"no engine is named {engine!r}; known: {', '.join(known)}")
+
+
+def _python_evaluate(expression: str, values: "Mapping[str, Any]") -> Any:
+    """`expression` through Python's `eval`, with `values` as its names."""
+    # The values are globals, not locals, so a comprehension sees them on every
+    # Python version (locals are invisible inside one before 3.12).
+    namespace: Dict[str, Any] = {str(key): value for key, value in values.items()}
+    namespace["__builtins__"] = builtins
+    try:
+        return eval(expression, namespace)  # noqa: S307 - trusted, refused by a sandbox
+    except NameError as exc:
+        raise UndefinedError(f"{expression!r}: {exc}") from exc
+
+
+class _NoFiles:
+    """A root with nothing in it: `tplx.evaluate`'s loader reads no file."""
+
+    name = stem = suffix = ""
+
+    def exists(self) -> bool:
+        return False
+
+    def __truediv__(self, other: Any) -> "_NoFiles":
+        return self
+
+    def __str__(self) -> str:
+        return "<no files>"
+
+
 class _Listing:
     """One directory's entries, indexed by file name and by stem."""
 
@@ -153,7 +233,7 @@ class _Listing:
         except NotADirectoryError:
             return None
 
-    def match(self, filename: str, engines: "Sequence[type]"):
+    def match(self, filename: str, engines: "Sequence[type]") -> Any:
         """The file for `filename`: the exact name, else the best stem match.
 
         Among stem matches, the one whose suffix the highest-priority engine
@@ -191,6 +271,9 @@ class Loader:
     `configure` maps an engine class to a function called once with that
     engine's own environment whenever a lookup builds one, for the class and
     its subclasses: `{JinjaTemplate: lambda env: env.filters.update(q=quote)}`.
+    `sandbox=True` renders untrusted templates: only engines whose class sets
+    `SANDBOXED` take part, and a file another engine claims raises
+    `SandboxError` before it is read.
     """
 
     def __init__(
@@ -202,6 +285,7 @@ class Loader:
         globals: "Optional[Mapping[str, Any]]" = None,
         encoder: "Optional[DataEncoder]" = None,
         configure: "Optional[Mapping[type, Callable[[Any], Any]]]" = None,
+        sandbox: bool = False,
     ) -> None:
         if undefined not in UNDEFINED_MODES:
             raise ValueError(
@@ -222,6 +306,7 @@ class Loader:
                     "configure maps an engine class to a callable, "
                     f"not {cls!r} to {function!r}"
                 )
+        self.sandbox = bool(sandbox)
         self._lookups: "OrderedDict[Hashable, Lookup]" = OrderedDict()
 
     def lookup(
@@ -281,6 +366,28 @@ class Loader:
             name, data, **overrides
         )
 
+    def evaluate(
+        self,
+        expression: str,
+        context: "Optional[Mapping[str, Any]]" = None,
+        /,
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        **overrides: Any,
+    ) -> Any:
+        """`self.lookup().evaluate(expression, context, engine=engine, **overrides)`."""
+        return self.lookup().evaluate(expression, context, engine=engine, **overrides)
+
+    def compile(
+        self,
+        source: "Union[str, bytes]",
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        name: str = "<string>",
+    ) -> Template:
+        """`self.lookup().compile(source, engine=engine, name=name)`."""
+        return self.lookup().compile(source, engine=engine, name=name)
+
 
 class Lookup:
     """A `Loader` bound to one set of candidates and search paths.
@@ -300,6 +407,7 @@ class Lookup:
         self.candidates = candidates
         self.paths = tuple(_as_path(path) for path in paths)
         self._templates: Dict[Hashable, Template] = {}
+        self._strings: "OrderedDict[Hashable, Template]" = OrderedDict()
         self._state: Dict[Hashable, Any] = {}
 
     def search_paths(self) -> list:
@@ -352,6 +460,12 @@ class Lookup:
                 path = listing.match(candidate, self.loader.engines)
                 if path is None:
                     continue
+                if self.loader.sandbox:
+                    # Refused before the file is read, by the suffix's engine.
+                    for cls in self.loader.engines:
+                        if can_process_suffix(cls, path):
+                            self._check_sandbox(cls, _origin(path))
+                            break
                 data = path.read_bytes()
                 mtime = path.stat().st_mtime
 
@@ -371,7 +485,13 @@ class Lookup:
         specific file added later is found only after this.
         """
         self._templates.clear()
+        self._strings.clear()
         self._state.clear()
+
+    def _check_sandbox(self, cls: type, what: str) -> None:
+        """Refuse `cls` when the loader is sandboxed and the engine is not."""
+        if self.loader.sandbox and not getattr(cls, "SANDBOXED", False):
+            raise SandboxError(f"{what}: {cls.__name__} cannot run in a sandbox")
 
     def _engine_for(
         self, name: "Names", source: Source
@@ -386,6 +506,7 @@ class Lookup:
         for cls in self.loader.engines:
             if not cls.can_process(file, source.data if text is None else text):
                 continue
+            self._check_sandbox(cls, source.origin)
             if cls.BINARY:
                 return cls, source.data
             if text is None:
@@ -494,6 +615,104 @@ class Lookup:
                 f"{type(template).__name__} failed to render {template.origin}: {exc}"
             ) from exc
 
+    def evaluate(
+        self,
+        expression: str,
+        context: "Optional[Mapping[str, Any]]" = None,
+        /,
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        **overrides: Any,
+    ) -> Any:
+        """The value of `expression` in `engine`'s syntax, its type kept.
+
+        `engine` is an engine class, its name or a suffix (`"jinja"`, `".j2"`,
+        `"go"`), or `"python"`; by default `tplx.DEFAULT_ENGINE` (`"python"`,
+        Python's own `eval`, which a sandbox refuses). The names are the
+        loader's globals, then `context`, then `overrides`.
+
+        :raises SandboxError: the loader is sandboxed and the engine is not.
+        :raises UndefinedError: a missing name, under `strict`.
+        :raises RenderError: the engine failed; `NotImplementedError` when it
+            has no expressions.
+        """
+        choice = _engine_named(
+            _default_engine() if engine is None else engine, self.loader.engines
+        )
+        values = {**self.loader.globals, **(context or {}), **overrides}
+        if choice == PYTHON:
+            if self.loader.sandbox:
+                raise SandboxError(
+                    "Python expressions cannot run in a sandbox; pass engine= one "
+                    "that can (jinja, liquid, go, ...)"
+                )
+            try:
+                return _python_evaluate(expression, values)
+            except TplxError:
+                raise
+            except Exception as exc:
+                raise RenderError(
+                    f"python failed to evaluate {expression!r}: {exc}"
+                ) from exc
+        assert isinstance(choice, type)
+        self._check_sandbox(choice, f"evaluate {expression!r}")
+        try:
+            return choice.evaluate(expression, values, lookup=self)
+        except (TplxError, NotImplementedError):
+            raise
+        except Exception as exc:
+            raise RenderError(
+                f"{choice.__name__} failed to evaluate {expression!r}: {exc}"
+            ) from exc
+
+    def compile(
+        self,
+        source: "Union[str, bytes]",
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        name: str = "<string>",
+    ) -> Template:
+        """`source` compiled by `engine`, cached by engine and source.
+
+        `engine` follows `evaluate`'s rule but must be a template engine (not
+        `"python"`). Includes resolve through this lookup. At most
+        `STRING_CACHE_SIZE` strings stay compiled.
+
+        :raises SandboxError: the loader is sandboxed and the engine is not.
+        :raises RenderError: the engine could not compile it.
+        """
+        choice = _engine_named(
+            _default_engine() if engine is None else engine, self.loader.engines
+        )
+        if not isinstance(choice, type):
+            raise ValueError(
+                'compile needs a template engine: pass engine= ("python" '
+                "only evaluates expressions)"
+            )
+        self._check_sandbox(choice, name)
+        key = (choice, source, name)
+        cached = self._strings.get(key)
+        if cached is not None:
+            self._strings.move_to_end(key)
+            return cached
+        body: "Union[str, bytes]" = source
+        if choice.BINARY and isinstance(source, str):
+            body = source.encode("utf-8")
+        elif not choice.BINARY and isinstance(source, bytes):
+            body = source.decode("utf-8")
+        try:
+            template = choice(body, lookup=self, origin=name)
+        except TplxError:
+            raise
+        except Exception as exc:
+            raise RenderError(
+                f"{choice.__name__} could not compile {name}: {exc}"
+            ) from exc
+        self._strings[key] = template
+        if len(self._strings) > STRING_CACHE_SIZE:
+            self._strings.popitem(last=False)
+        return template
+
     def state(self, key: Hashable, factory: Callable[[], Any]) -> Any:
         """Per-lookup state for an engine, built by `factory` on first use.
 
@@ -508,3 +727,33 @@ class Lookup:
 
 
 _template.Lookup = Lookup
+
+#: `evaluate`'s loaders, by sandbox, undefined mode and registry: they read no
+#: file, and keep compiled expressions between calls.
+_EVALUATORS: "Dict[Hashable, Loader]" = {}
+
+
+def evaluate(
+    expression: str,
+    context: "Optional[Mapping[str, Any]]" = None,
+    /,
+    *,
+    engine: "Optional[EngineChoice]" = None,
+    sandbox: bool = False,
+    undefined: str = "strict",
+    **overrides: Any,
+) -> Any:
+    """The value of `expression` over `context`, with no loader to set up.
+
+    `Loader.evaluate` on a loader that reads no file. `engine` defaults to
+    `tplx.DEFAULT_ENGINE` (`"python"`); `sandbox=True` refuses `"python"` and
+    every engine that is not `SANDBOXED`. A data name that is `engine`,
+    `sandbox` or `undefined` goes in `context`.
+    """
+    key = (bool(sandbox), undefined, _registry.registered_engines())
+    loader = _EVALUATORS.get(key)
+    if loader is None:
+        loader = _EVALUATORS[key] = Loader(
+            [_NoFiles()], sandbox=sandbox, undefined=undefined
+        )
+    return loader.evaluate(expression, context, engine=engine, **overrides)

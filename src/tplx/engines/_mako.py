@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from io import StringIO
 from typing import Any, Mapping, Optional
 
 from .._loader import Lookup
 from .._template import Template
 from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
+from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 
 LOGGER = logging.getLogger("tplx")
 
@@ -115,6 +117,58 @@ class MakoTemplate(Template):
 
     EXT = (".mako",)
 
+    @classmethod
+    def template_lookup(cls, lookup: "Optional[Lookup]" = None) -> Any:
+        """The mako `TemplateLookup` `lookup`'s templates share."""
+        Mako, TemplateLookup, _ = _mako()
+        strict = (
+            lookup.loader.undefined if lookup is not None else "strict"
+        ) == "strict"
+
+        def factory():
+            return cls.configured(
+                lookup, _template_lookup(TemplateLookup, Mako, lookup, cls, strict)
+            )
+
+        if lookup is None:
+            return factory()
+        return lookup.state(("mako", cls, strict), factory)
+
+    @classmethod
+    def evaluate(
+        cls,
+        expression: str,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """A Python expression as mako's `${...}` reads it, its value's type kept."""
+        Mako, _, runtime = _mako()
+        mako_lookup = cls.template_lookup(lookup)
+        source = "${%s(%s)}" % (CAPTURE_NAME, expression)
+        build = lambda: Mako(
+            source, lookup=mako_lookup, **mako_lookup.template_args
+        )  # noqa: E731
+        if lookup is None:
+            template = build()
+        else:
+            cache = lookup.state(("mako-expressions", cls), OrderedDict)
+            template = cached(cache, expression, build)
+        names = {k: v for k, v in values.items() if k not in RESERVED_NAMES}
+        names[CAPTURE_NAME] = capture
+        strict = (
+            lookup.loader.undefined if lookup is not None else "strict"
+        ) == "strict"
+        with capturing() as box:
+            if strict:
+                try:
+                    template.render(**names)
+                except NameError as exc:
+                    raise UndefinedError(f"{expression!r}: {exc}") from exc
+            else:
+                template.render_context(_blanks_context(runtime)(StringIO(), **names))
+        return captured(box)
+
     def __init__(
         self,
         source: str,
@@ -123,16 +177,8 @@ class MakoTemplate(Template):
         origin: str = "<string>",
     ) -> None:
         super().__init__(source, lookup=lookup, origin=origin)
-        Mako, TemplateLookup, self._runtime = _mako()
-        strict = self.undefined == "strict"
-        key = ("mako", type(self), strict)
-
-        def factory():
-            return self.configure_native(
-                _template_lookup(TemplateLookup, Mako, lookup, type(self), strict)
-            )
-
-        mako_lookup = lookup.state(key, factory) if lookup is not None else factory()
+        Mako, _, self._runtime = _mako()
+        mako_lookup = type(self).template_lookup(lookup)
         # The lookup's template_args (strict_undefined, and whatever `configure`
         # set, such as imports or default_filters) build every template.
         self._template = Mako(

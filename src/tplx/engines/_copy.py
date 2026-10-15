@@ -41,6 +41,7 @@ class CopyTemplate(Template):
     EXT = None
     PRIORITY = FALLBACK_PRIORITY
     BINARY = True
+    SANDBOXED = True
 
     def __init__(
         self,
