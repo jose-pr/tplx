@@ -62,12 +62,13 @@ a drive) is refused.
 
 ## Values and untrusted templates
 
-`tplx.interpolate("{{ port + 1 }}", {"port": 80}, engine="jinja")` is `81`,
+`tplx.evaluate("{{ port + 1 }}", {"port": 80}, engine="jinja")` is `81`,
 `"Test {{ port }}"` is `"Test 80"` and `"web01.lan"` comes back untouched: one
-call per value read from a document. `tplx.evaluate("port + 1", {"port": 80})`
-is `81` too: an expression's value,
-its type kept, in Python by default or in an engine's own syntax
-(`engine="jinja"`, `"liquid"`, `"go"`, ...). `Loader.compile` compiles a
+call per value read from a document, in any engine's syntax (`engine="jinja"`,
+`"liquid"`, `"go"`, ...). A template that is one expression keeps its type;
+any other renders to text. With no `engine`, `tplx.DEFAULT_ENGINE` is the
+shell syntax with `$` (`${HOST:-localhost}`), which is sandboxed and needs no
+extra. `Loader.compile` compiles a
 string template, cached, and `Template.references()` lists the names it
 reads. `Loader(sandbox=True)` renders templates you do not trust: only the
 engines that can be sandboxed (Jinja's `SandboxedEnvironment`, Liquid,
