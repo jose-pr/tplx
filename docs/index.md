@@ -60,6 +60,17 @@ mako run Python, ERB and EPP run Ruby and Puppet. What tplx guards is the
 template **name**: one that would leave the search paths (`..`, a backslash,
 a drive) is refused.
 
+## Values and untrusted templates
+
+`tplx.evaluate("port + 1", {"port": 80})` is `81`: an expression's value,
+its type kept, in Python by default or in an engine's own syntax
+(`engine="jinja"`, `"liquid"`, `"go"`, ...). `Loader.compile` compiles a
+string template, cached, and `Template.references()` lists the names it
+reads. `Loader(sandbox=True)` renders templates you do not trust: only the
+engines that can be sandboxed (Jinja's `SandboxedEnvironment`, Liquid,
+Mustache, Handlebars, Go, shell, envsubst, copy) take part, and a file another
+engine claims is refused before it is read.
+
 ## Learn more
 
 - [Command line](cli.md)
