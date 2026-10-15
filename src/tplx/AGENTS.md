@@ -15,7 +15,7 @@ are private.
 no dependency. The `cli` extra (duho) adds the `tplx` command. Each other
 engine's library is an extra: `jinja` (jinja2),
 `mako`, `liquid` (python-liquid), `handlebars` (pybars3), `mustache`
-(chevron), `go` (gotpl, Python 3.11 or later). `.erb` needs `ruby` and `.epp`
+(chevron), `go` (gotpl, Python 3.11 or later), `cheetah` (CT3). `.erb` needs `ruby` and `.epp`
 needs `puppet` on `PATH`.
 
 `tplx.__version__` is the installed distribution's version.
@@ -219,6 +219,7 @@ rule. Names are root-relative, never relative to the including file.
 | Liquid | `{% include %}`, `{% render %}` |
 | Handlebars, Mustache | `{{> name}}` |
 | Go | `{{template "name" .}}`, `{{block "name" .}}` |
+| Cheetah | `#include "name"`, `#include raw "name"` |
 | shell, envsubst, ERB, EPP, copy | none |
 
 ## Engines (`tplx`, `tplx.engines`)
@@ -230,6 +231,7 @@ rule. Names are root-relative, never relative to the including file.
 | `LiquidTemplate` | `.liquid` | `liquid` | all three |
 | `HandlebarsTemplate` | `.hbs .handlebars` | `handlebars` | always empty |
 | `MustacheTemplate` | `.mustache` | `mustache` | always empty |
+| `CheetahTemplate` | `.cheetah` | `cheetah` | all three |
 | `GoTemplate` | `.tmpl .gotmpl` | `go` (Python 3.11+) | strict; `lenient` and `debug` write `<no value>` |
 | `ERBTemplate` | `.erb` | `ruby` (`TPLX_RUBY`) | none: Ruby `nil` |
 | `EPPTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
@@ -241,6 +243,15 @@ rule. Names are root-relative, never relative to the including file.
   default, writes every line ending as `\n`: a CRLF template renders LF.
 - **mako** drops a data name it reserves (`RESERVED_NAMES`: `self`,
   `context`, `next`, ...) with a warning.
+- **Cheetah** (CT3, the maintained Cheetah3; Cobbler's kickstart language)
+  takes the data as its search list, as it is: `$target.hostname` is a key or
+  an attribute. `#include "name"` resolves through the lookup (nested includes
+  too); `#include raw` inserts a Cheetah file's text unparsed; another
+  engine's file is rendered with the render's data. A variable an include
+  should see is `#set global`, as in Cheetah. `strict` raises an undefined
+  name as `UndefinedError`, `lenient` renders it empty, `debug` writes it back
+  as `$name` (both through Cheetah's `#errorCatcher`, so an error's line
+  number is one higher).
 - **Go** (`text/template`, rendered by the pure-Python gotpl) reads the
   data as it is: `.Name` is a key or an attribute. Only Go's builtin
   functions; Sprig is one `configure` away. `{{template "name" .}}` and
@@ -322,6 +333,7 @@ so filters, helpers and options reach every template and include:
 | `LiquidTemplate` | `liquid.Environment` | `env.filters["quote"] = shlex.quote` |
 | `MakoTemplate` | `mako.lookup.TemplateLookup` | `lookup.template_args["imports"] = ["from shlex import quote"]` |
 | `HandlebarsTemplate` | the `dict` of helpers every render passes | `helpers["quote"] = lambda this, v: shlex.quote(v)` |
+| `CheetahTemplate` | the `dict` of Cheetah compiler settings | `settings["cheetahVarStartToken"] = "@"` |
 | `GoTemplate` | the `dict` of functions every template has | `functions.update(gotpl.funcs.sprig.text_func_map())` |
 
 Mustache, the shell engine, ERB, EPP and copy have no environment; an entry

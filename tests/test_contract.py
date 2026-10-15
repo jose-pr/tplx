@@ -58,6 +58,13 @@ class TestShell(EngineContract):
     expected = "tplx"
 
 
+@_needs("Cheetah")
+class TestCheetah(EngineContract):
+    engine = tplx.CheetahTemplate
+    source = "$name"
+    expected = "tplx"
+
+
 @_needs("gotpl")
 class TestGo(EngineContract):
     engine = tplx.GoTemplate

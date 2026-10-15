@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `CheetahTemplate` (`.cheetah`): Cheetah, Cobbler's kickstart language,
+  rendered by CT3 behind the `cheetah` extra. `#include` resolves through the
+  lookup; all three undefined modes apply; `configure` sets Cheetah's
+  compiler settings.
+
+### Changed
+
+- A `.cheetah` file is rendered by the Cheetah engine; 0.1.2 copied it byte
+  for byte.
+
 ## [0.1.2] - 2026-10-15
 
 ### Added

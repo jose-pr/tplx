@@ -41,6 +41,7 @@ def test_the_shipped_engines_are_registered_with_the_fallback_last():
         "ShellTemplate",
         "EnvsubstTemplate",
         "GoTemplate",
+        "CheetahTemplate",
     } <= set(names)
     assert CopyTemplate.PRIORITY == FALLBACK_PRIORITY
     assert ShellTemplate.PRIORITY == JinjaTemplate.PRIORITY == DEFAULT_PRIORITY

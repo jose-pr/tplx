@@ -9,6 +9,7 @@ package imports no engine library.
 from __future__ import annotations
 
 from .._registry import register_engine
+from ._cheetah import CheetahTemplate
 from ._copy import CopyTemplate
 from ._external import EPPTemplate, ERBTemplate, SubprocessTemplate
 from ._go import GoTemplate
@@ -20,6 +21,7 @@ from ._mustache import MustacheTemplate
 from ._shell import EnvsubstTemplate, ShellTemplate
 
 __all__ = [
+    "CheetahTemplate",
     "CopyTemplate",
     "EnvsubstTemplate",
     "EPPTemplate",
@@ -41,6 +43,7 @@ for _engine in (
     HandlebarsTemplate,
     MustacheTemplate,
     GoTemplate,
+    CheetahTemplate,
     ERBTemplate,
     EPPTemplate,
     ShellTemplate,
