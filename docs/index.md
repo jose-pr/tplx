@@ -62,7 +62,7 @@ a drive) is refused.
 
 ## Values and untrusted templates
 
-`tplx.evaluate("{{ port + 1 }}", {"port": 80}, engine="jinja")` is `81`,
+`tplx.eval("{{ port + 1 }}", {"port": 80}, engine="jinja")` is `81`,
 `"Test {{ port }}"` is `"Test 80"` and `"web01.lan"` comes back untouched: one
 call per value read from a document, in any engine's syntax (`engine="jinja"`,
 `"liquid"`, `"go"`, ...). A template that is one expression keeps its type;

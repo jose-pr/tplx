@@ -100,7 +100,7 @@ loader = Loader(
 )
 ```
 
-Values, too: `tplx.evaluate` evaluates one value read from a document. A
+Values, too: `tplx.eval` gives what a value read from a document stands for. A
 template that is one expression keeps its type, any other renders to text,
 and text with no syntax comes back as it is. `Loader(sandbox=True)` renders
 templates written by someone you do not trust:
@@ -108,11 +108,11 @@ templates written by someone you do not trust:
 ```python
 import tplx
 
-tplx.evaluate("{{ port + 1 }}", {"port": 80}, engine="jinja")    # 81, an int
-tplx.evaluate("{{ xs | sort }}", {"xs": [3, 1]}, engine="jinja") # [1, 3]
-tplx.evaluate("Test {{ port }}", {"port": 80}, engine="jinja")   # "Test 80"
-tplx.evaluate("web01.lan", {}, engine="jinja")                   # as it is
-tplx.evaluate("${HOST:-localhost}:${PORT}", {"port": 80})        # "localhost:80"
+tplx.eval("{{ port + 1 }}", {"port": 80}, engine="jinja")        # 81, an int
+tplx.eval("{{ xs | sort }}", {"xs": [3, 1]}, engine="jinja")     # [1, 3]
+tplx.eval("Test {{ port }}", {"port": 80}, engine="jinja")       # "Test 80"
+tplx.eval("web01.lan", {}, engine="jinja")                       # as it is
+tplx.eval("${HOST:-localhost}:${PORT}", {"port": 80})            # "localhost:80"
 untrusted = tplx.Loader(["uploads"], sandbox=True)               # Jinja, Liquid, Go, ...
 ```
 
