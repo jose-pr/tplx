@@ -109,6 +109,8 @@ import tplx
 
 tplx.evaluate("port + 1", {"port": 80})                          # 81
 tplx.evaluate("xs | sort", {"xs": [3, 1]}, engine="jinja")       # [1, 3]
+tplx.interpolate("{{ port }}", {"port": 80}, engine="jinja")     # 80, an int
+tplx.interpolate("web01.lan", {}, engine="jinja")                # as it is
 untrusted = tplx.Loader(["uploads"], sandbox=True)               # Jinja, Liquid, Go, ...
 ```
 

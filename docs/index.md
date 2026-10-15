@@ -62,7 +62,10 @@ a drive) is refused.
 
 ## Values and untrusted templates
 
-`tplx.evaluate("port + 1", {"port": 80})` is `81`: an expression's value,
+`tplx.interpolate("{{ port + 1 }}", {"port": 80}, engine="jinja")` is `81`,
+`"Test {{ port }}"` is `"Test 80"` and `"web01.lan"` comes back untouched: one
+call per value read from a document. `tplx.evaluate("port + 1", {"port": 80})`
+is `81` too: an expression's value,
 its type kept, in Python by default or in an engine's own syntax
 (`engine="jinja"`, `"liquid"`, `"go"`, ...). `Loader.compile` compiles a
 string template, cached, and `Template.references()` lists the names it
