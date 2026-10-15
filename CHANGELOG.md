@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-15
+
 ### Added
 
 - `Loader(sandbox=True)` for untrusted templates: only engines with
@@ -102,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TplxError` and its subclasses in `tplx.exceptions`; the `TPLX_RUBY` and
   `TPLX_PUPPET` environment variables.
 
-[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/jose-pr/tplx/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/jose-pr/tplx/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/jose-pr/tplx/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jose-pr/tplx/compare/v0.1.0...v0.1.1
