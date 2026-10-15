@@ -17,6 +17,7 @@ pip install tplx
 | Liquid | `.liquid` | `tplx[liquid]` | strict, lenient, debug | `{% include %}` `{% render %}` |
 | Handlebars | `.hbs` `.handlebars` | `tplx[handlebars]` | always empty | `{{> name}}` |
 | Mustache | `.mustache` | `tplx[mustache]` | always empty | `{{> name}}` |
+| Cheetah | `.cheetah` | `tplx[cheetah]` | strict, lenient, debug | `#include "name"` |
 | Go (`text/template`) | `.tmpl` `.gotmpl` | `tplx[go]`, Python 3.11+ | strict; otherwise `<no value>` | `{{template "name" .}}` |
 | ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
 | EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
