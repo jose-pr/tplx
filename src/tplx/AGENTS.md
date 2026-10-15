@@ -217,8 +217,17 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   data or `globals` stays callable; a class or a callable object does not
   (calling a class would build an object whose methods a template could reach).
 - **Cost**: `SandboxLimits(max_output=1_000_000, max_iterations=100_000,
-  max_depth=100)` bounds one render; going over raises `SandboxError`. Output
-  over `max_output` is refused for every engine, and Jinja (streamed), Liquid
+  max_depth=100)` bounds one render or evaluation; going over raises
+  `SandboxError`. `max_output` is also the largest **value** a sandboxed
+  template may build (characters, items or decimal digits), refused before it
+  is allocated: in Jinja `*`, `**`, `+`, `%`, `~`, the `str` methods and
+  filters that build by width or count (`center`, `ljust`, `rjust`, `zfill`,
+  `expandtabs`, `format`, `replace`, `join`, `indent`, `wordwrap`) and
+  `lipsum`; Go's `printf` widths; Liquid's `replace` and `join` (its own
+  namespace limit caps assigned values); shell and envsubst replacements; and
+  every value `evaluate` returns. These checks are in-process and best-effort:
+  they bound what each step builds, not the process's memory. Output over
+  `max_output` is refused for every engine, and Jinja (streamed), Liquid
   and Go stop as they reach it; Liquid and Go count loop iterations; Liquid,
   Go and includes of another engine's file count depth (Jinja's own includes
   end at Python's recursion limit, a `RenderError`). Jinja's sandbox caps

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A sandboxed template or expression could make the process allocate without
+  bound (`"x" * 10**10`, `[0] * 50000000`, `"x".center(n)`, a format width,
+  Go's `printf` width): `SandboxLimits.max_output` now bounds every value a
+  sandboxed template builds, refused before it is allocated, and every value
+  `evaluate` returns.
+
 ## [0.1.5] - 2026-10-15
 
 ### Added

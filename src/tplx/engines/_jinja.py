@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections import OrderedDict
 from typing import Any, FrozenSet, Mapping, Optional
@@ -14,6 +15,7 @@ from ..exceptions import (
     TemplateNotFound,
     UndefinedError,
 )
+from . import _bounds as bounds
 from ._capture import cached
 
 #: The global a stub calls to render another engine's file.
@@ -58,8 +60,9 @@ def _environment(
             stub = "{{ %s(%s) }}" % (INCLUDE_NAME, json.dumps(name))
             return stub, source.origin, source.uptodate
 
+    limits = lookup.loader.limits if lookup is not None else None
     if sandbox:
-        from jinja2.sandbox import ImmutableSandboxedEnvironment as Environment
+        Environment = _bounded_environment(limits.max_output if limits else 1_000_000)
     else:
         Environment = jinja2.Environment
     environment = Environment(
@@ -81,7 +84,111 @@ def _environment(
         return lookup.render_include(name, values)
 
     environment.globals[INCLUDE_NAME] = include
+    if sandbox:
+        _bound_filters(environment, limits.max_output if limits else 1_000_000)
     return environment
+
+
+def _bounded_environment(limit: int) -> type:
+    """Jinja's immutable sandbox, refusing before it allocates past `limit`.
+
+    `*`, `**`, `+` and `%` are checked on their operands (Jinja's
+    `intercepted_binops`), `~` through `tplx_concat`, and a `str` method that
+    builds by width or count before it is called; any value larger than
+    `limit` is refused, so a value cannot grow step by step past it.
+    """
+    from jinja2.compiler import CodeGenerator
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+    class _Generator(CodeGenerator):
+        def visit_Concat(self, node, frame) -> None:
+            # `a ~ b` as `environment.tplx_concat((a, b))`, so it is checked.
+            self.write("environment.tplx_concat((")
+            for argument in node.nodes:
+                self.visit(argument, frame)
+                self.write(", ")
+            self.write("))")
+
+    class _Bounded(ImmutableSandboxedEnvironment):
+        code_generator_class = _Generator
+        intercepted_binops = frozenset({"*", "**", "+", "%"})
+
+        def call_binop(self, context, operator, left, right):
+            bounds.binop(operator, left, right, limit)
+            result = super().call_binop(context, operator, left, right)
+            return bounds.checked(result, limit)
+
+        def call(__self, __context, __obj, *args, **kwargs):  # noqa: N805
+            bounds.method_call(__obj, args, kwargs, limit)
+            result = ImmutableSandboxedEnvironment.call(
+                __self, __context, __obj, *args, **kwargs
+            )
+            return bounds.checked(result, limit)
+
+        def tplx_concat(self, parts) -> str:
+            texts = [str(part) for part in parts]
+            bounds.refuse("a concatenation", sum(map(len, texts)), limit)
+            return "".join(texts)
+
+    return _Bounded
+
+
+def _bound_filters(environment, limit: int) -> None:
+    """Check the filters and globals that build by width or count, before they run."""
+
+    def text_length(value) -> int:
+        return len(value) if isinstance(value, str) else len(str(value))
+
+    def center(value, width=80, *rest, **keywords):
+        bounds.refuse("center", max(width, text_length(value)), limit)
+
+    def indent(value, width=4, *rest, **keywords):
+        step = len(width) if isinstance(width, str) else width
+        lines = str(value).count("\n") + 1
+        bounds.refuse("indent", text_length(value) + lines * max(step, 0), limit)
+
+    def format_(value, *args, **keywords):
+        bounds.format_widths(value, args + tuple(keywords.values()), limit)
+
+    def replace(context, value, old, new, count=None):
+        bounds.replace(str(value), old, new, -1 if count is None else count, limit)
+
+    def join(context, value, d="", attribute=None):
+        bounds.join(d, value, limit)
+
+    def wordwrap(
+        env, value, width=79, break_long_words=True, wrapstring=None, *rest, **keywords
+    ):
+        wrap = wrapstring if wrapstring is not None else env.newline_sequence
+        breaks = text_length(value) // max(width, 1) + 1
+        bounds.refuse("wordwrap", text_length(value) + breaks * len(wrap), limit)
+
+    def guard(table, name, check) -> None:
+        original = table.get(name)
+        if original is None:
+            return
+
+        @functools.wraps(original)
+        def guarded(*args, **keywords):
+            check(*args, **keywords)
+            return bounds.checked(original(*args, **keywords), limit)
+
+        table[name] = guarded
+
+    for name, check in (
+        ("center", center),
+        ("indent", indent),
+        ("format", format_),
+        ("replace", replace),
+        ("join", join),
+        ("wordwrap", wordwrap),
+    ):
+        guard(environment.filters, name, check)
+
+    def lipsum(n=5, html=True, min=20, max=100):
+        bounds.refuse("lipsum", n * max * 12, limit)
+
+    guard(environment.globals, "lipsum", lipsum)
 
 
 class JinjaTemplate(Template):

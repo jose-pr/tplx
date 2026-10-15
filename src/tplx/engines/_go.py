@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .._loader import Lookup
 from .._template import Template
+from . import _bounds as bounds
 from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 from ..exceptions import (
     EngineUnavailableError,
@@ -92,6 +93,8 @@ class GoTemplate(Template):
         sandbox = None
         limits = lookup.loader.limits if lookup is not None else None
         if limits is not None:
+            functions = dict(functions)
+            functions["printf"] = _bounded_printf(gotpl, limits.max_output)
             sandbox = gotpl.SandboxPolicy(
                 allow_functions=functions,
                 default_budget=gotpl.ExecutionBudget(
@@ -233,6 +236,17 @@ class GoTemplate(Template):
         except gotpl.TemplateExecutionError as exc:
             _translate(gotpl, exc, self.origin)
             raise
+
+
+def _bounded_printf(gotpl: Any, limit: int) -> Callable[..., str]:
+    """Go's `printf`, refusing a width or precision past `limit` before it runs."""
+    from gotpl.runtime.sync_vm import _printf
+
+    def printf(format_string: Any, *values: Any) -> str:
+        bounds.format_widths(format_string, values, limit)
+        return bounds.checked(_printf(format_string, *values, format_mode="go"), limit)
+
+    return printf
 
 
 def _translate(gotpl: Any, exc: Exception, where: str) -> None:

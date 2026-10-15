@@ -701,13 +701,22 @@ class Lookup:
         assert isinstance(choice, type)
         self._check_sandbox(choice, f"evaluate {expression!r}")
         try:
-            return choice.evaluate(expression, values, lookup=self)
+            result = choice.evaluate(expression, values, lookup=self)
         except (TplxError, NotImplementedError):
             raise
         except Exception as exc:
             raise RenderError(
                 f"{choice.__name__} failed to evaluate {expression!r}: {exc}"
             ) from exc
+        limits = self.loader.limits
+        if limits is not None:
+            from .engines._bounds import size
+
+            if size(result) > limits.max_output:
+                raise SandboxError(
+                    f"evaluate {expression!r}: a value larger than {limits.max_output}"
+                )
+        return result
 
     def compile(
         self,

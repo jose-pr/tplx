@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tupl
 from .._loader import Lookup
 
 from .._template import Template
-from ..exceptions import UndefinedError
+from ..exceptions import SandboxError, UndefinedError
 
 LOGGER = logging.getLogger("tplx")
 
@@ -130,8 +130,13 @@ def _split_unescaped(text: str, separator: str) -> Tuple[str, Optional[str]]:
     return text, None
 
 
-def _substitute(value: str, kind: str, pattern: str, text: str) -> str:
-    """bash `${v/p/t}` (`kind` ""), `${v//p/t}` ("/"), `${v/#p/t}` ("#"), `${v/%p/t}` ("%")."""
+def _substitute(
+    value: str, kind: str, pattern: str, text: str, limit: Optional[int] = None
+) -> str:
+    """bash `${v/p/t}` (`kind` ""), `${v//p/t}` ("/"), `${v/#p/t}` ("#"), `${v/%p/t}` ("%").
+
+    With a `limit` (a sandbox's), the result may not grow past it.
+    """
     if not pattern:
         return value
     if kind == "#":
@@ -158,6 +163,12 @@ def _substitute(value: str, kind: str, pattern: str, text: str) -> str:
         parts.append(value[position : found.start()])
         parts.append(text)
         position = found.end()
+        if limit is not None:
+            grown = sum(map(len, parts)) + len(value) - position
+            if grown > limit:
+                raise SandboxError(
+                    f"a replacement would be larger than the sandbox allows ({limit})"
+                )
         if kind != "/":
             break
     parts.append(value[position:])
@@ -223,6 +234,7 @@ class ShellTemplate(Template):
     SANDBOXED = True
     #: What introduces a placeholder. Doubling it escapes it (`escape`).
     DELIMITER: ClassVar[str] = "%"
+
     #: One of `PATTERNS`: `braced` for `%{NAME}` only, `unbraced` for `%NAME`
     #: only, `all` for both.
     PATTERN: ClassVar[Optional[str]] = "braced"
@@ -460,7 +472,14 @@ class ShellTemplate(Template):
                 kind = spec[:1] if spec[:1] in ("/", "#", "%") else ""
                 pattern, text = _split_unescaped(spec[len(kind) :], "/")
                 value = self._value(key, whole, variables)
-                return _substitute(value, kind, pattern, text or "")
+                limits = self.lookup.loader.limits if self.lookup else None
+                return _substitute(
+                    value,
+                    kind,
+                    pattern,
+                    text or "",
+                    limits.max_output if limits else None,
+                )
             if rest[:1] in ("#", "%"):
                 if "trim" not in features:
                     return None

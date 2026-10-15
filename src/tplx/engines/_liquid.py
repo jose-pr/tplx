@@ -15,6 +15,7 @@ from ..exceptions import (
     TemplateNotFound,
     UndefinedError,
 )
+from . import _bounds as bounds
 from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 
 
@@ -81,7 +82,28 @@ def _environment(liquid, TemplateSource, lookup, engine: type, mode: str):
         environment.loop_iteration_limit = limits.max_iterations
         environment.context_depth_limit = limits.max_depth
         environment.local_namespace_limit = limits.max_output
+        _bound_filters(environment, limits.max_output)
     return environment
+
+
+def _bound_filters(environment: Any, limit: int) -> None:
+    """Check Liquid's `replace` and `join` before they build their result."""
+    filters = environment.filters
+    original_replace, original_join = filters.get("replace"), filters.get("join")
+    if original_replace is not None:
+
+        def replace(value, seq, sub="", *args, **keywords):
+            bounds.replace(str(value), str(seq), str(sub), -1, limit)
+            return original_replace(value, seq, sub, *args, **keywords)
+
+        filters["replace"] = replace
+    if original_join is not None:
+
+        def join(value, separator=" ", *args, **keywords):
+            bounds.join(separator, value, limit)
+            return original_join(value, separator, *args, **keywords)
+
+        filters["join"] = join
 
 
 class LiquidTemplate(Template):

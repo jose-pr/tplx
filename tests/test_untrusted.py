@@ -319,3 +319,93 @@ def test_shared_and_cyclic_lists_cost_one_visit(module, engine, sandbox):
     loop.append(loop)
     loader = Loader([], sandbox=sandbox)
     assert loader.evaluate("1", {"big": shared, "loop": loop}, engine=engine) == 1
+
+
+# -- a sandbox refuses before it allocates past max_output --------------------------
+
+TIGHT = SandboxLimits(max_output=1000)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        '"x" * 5000',
+        "[0] * 5000",
+        "9 ** 5000",
+        '"x".center(5000)',
+        '"x".ljust(5000)',
+        '"{:>5000}".format(1)',
+        '"{:>{}}".format(1, 5000)',
+        '"%5000d" % 1',
+        '"x" | center(5000)',
+        '"%5000d" | format(1)',
+        '"a" | replace("", "x" * 900)',
+        'range(10) | join("x" * 900)',
+        '"a\nb\nc" | indent(900)',
+        "lipsum(1000)",
+        '("x" * 600) ~ ("y" * 600)',
+        '("x" * 600) + ("y" * 600)',
+    ],
+)
+def test_jinja_refuses_a_value_past_the_limit_before_building_it(expression):
+    pytest.importorskip("jinja2")
+    with pytest.raises(SandboxError, match="larger than the sandbox allows"):
+        Loader([], sandbox=TIGHT).evaluate(expression, engine="jinja")
+
+
+def test_a_value_grown_step_by_step_in_a_loop_stops_at_the_limit(tree):
+    pytest.importorskip("jinja2")
+    tree.write(
+        "p.j2",
+        '{% set ns = namespace(a="x") %}'
+        "{% for i in range(40) %}{% set ns.a = ns.a ~ ns.a %}{% endfor %}"
+        "{{ ns.a | length }}",
+    )
+    with pytest.raises(SandboxError):
+        Loader([tree.root], sandbox=TIGHT).render("p")
+
+
+def test_ordinary_sandboxed_expressions_still_work():
+    pytest.importorskip("jinja2")
+    loader = Loader([], sandbox=TIGHT)
+    assert (
+        loader.evaluate('"ab" * 3 ~ "{:>4}".format(1)', engine="jinja") == "ababab   1"
+    )
+    assert loader.evaluate("2 ** 100", engine="jinja") == 2**100
+
+
+def test_go_printf_refuses_a_width_past_the_limit():
+    pytest.importorskip("gotpl")
+    loader = Loader([], sandbox=TIGHT)
+    assert loader.evaluate('printf "%5d" 1', engine="go") == "    1"
+    with pytest.raises(SandboxError):
+        loader.evaluate('printf "%5000d" 1', engine="go")
+
+
+def test_liquid_replace_and_join_refuse_a_result_past_the_limit():
+    pytest.importorskip("liquid")
+    loader = Loader([], sandbox=TIGHT)
+    with pytest.raises(SandboxError):
+        loader.evaluate(
+            '"aaaaaaaaaa" | replace: "a", s', {"s": "x" * 500}, engine="liquid"
+        )
+    with pytest.raises(SandboxError):
+        loader.evaluate(
+            "xs | join: s", {"xs": list(range(10)), "s": "x" * 500}, engine="liquid"
+        )
+
+
+def test_shell_replacement_stops_at_the_limit():
+    loader = Loader([], sandbox=TIGHT)
+    data = {"v": "a" * 100}
+    assert loader.evaluate("V//a/bb", data, engine="shell") == "b" * 200
+    with pytest.raises(SandboxError):
+        loader.evaluate("V//a/" + "b" * 50, data, engine="shell")
+
+
+def test_an_evaluated_value_past_the_limit_is_refused():
+    with pytest.raises(SandboxError):
+        Loader([], sandbox=TIGHT).evaluate(
+            "xs", {"xs": list(range(5000))}, engine="mustache"
+        )
+
