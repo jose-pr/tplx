@@ -7,6 +7,7 @@ A render therefore needs the program installed and spawns a process.
 
 from __future__ import annotations
 
+import re
 import json
 import os
 import shutil
@@ -204,8 +205,8 @@ class ERBTemplate(SubprocessTemplate):
     """
 
     EXT = (".erb",)
-    MARKERS = ("<%",)
-    EXPRESSION = ("<%=", "%>")
+    _SYNTAX = re.compile("<%")
+    _EXPRESSION = ("<%=", "%>", "", "-")
     COMMAND = "ruby"
     ENV_VAR = "TPLX_RUBY"
 
@@ -223,8 +224,8 @@ class EPPTemplate(SubprocessTemplate):
     """
 
     EXT = (".epp",)
-    MARKERS = ("<%",)
-    EXPRESSION = ("<%=", "%>")
+    _SYNTAX = re.compile("<%")
+    _EXPRESSION = ("<%=", "%>", "", "-")
     COMMAND = "puppet"
     ENV_VAR = "TPLX_PUPPET"
     NEWLINES = "lf"

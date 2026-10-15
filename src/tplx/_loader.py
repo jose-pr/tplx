@@ -416,6 +416,18 @@ class Loader:
         """`self.lookup().compile(source, engine=engine, name=name)`."""
         return self.lookup().compile(source, engine=engine, name=name)
 
+    def interpolate(
+        self,
+        value: Any,
+        context: "Optional[Mapping[str, Any]]" = None,
+        /,
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        **overrides: Any,
+    ) -> Any:
+        """`self.lookup().interpolate(value, context, engine=engine, **overrides)`."""
+        return self.lookup().interpolate(value, context, engine=engine, **overrides)
+
 
 class Lookup:
     """A `Loader` bound to one set of candidates and search paths.
@@ -642,7 +654,15 @@ class Lookup:
         :raises RenderError: the engine failed; `UndefinedError` for a missing
             name in `strict` mode. Also everything `get` raises.
         """
-        template = self.get(name)
+        return self._render_template(self.get(name), data, overrides)
+
+    def _render_template(
+        self,
+        template: Template,
+        data: "Optional[Mapping[str, Any]]",
+        overrides: "Mapping[str, Any]",
+    ) -> "Union[str, bytes]":
+        """`template` with the loader's globals, `data` and `overrides`, checked."""
         values = {**self.loader.globals, **(data or {}), **overrides}
         try:
             rendered = template.render_values(values)
@@ -658,6 +678,48 @@ class Lookup:
                 f"{template.origin}: output longer than {limits.max_output}"
             )
         return rendered
+
+    def interpolate(
+        self,
+        value: Any,
+        context: "Optional[Mapping[str, Any]]" = None,
+        /,
+        *,
+        engine: "Optional[EngineChoice]" = None,
+        **overrides: Any,
+    ) -> Any:
+        """`value` with its template filled in, for a value read from a document.
+
+        A value that is not a `str`, or text in which `engine` finds no syntax
+        (`is_template`), comes back as it is, with nothing compiled. Text that
+        is exactly one expression (`"{{ port + 1 }}"`) gives the expression's
+        value, its type kept (`evaluate`); any other text renders to a string
+        (`compile`, cached). `engine` follows `compile`'s rule.
+
+        :raises SandboxError: the loader is sandboxed and the engine is not,
+            or a limit was passed.
+        """
+        if not isinstance(value, str):
+            return value
+        choice = _engine_named(
+            _default_engine() if engine is None else engine, self.loader.engines
+        )
+        if not isinstance(choice, type):
+            raise ValueError(
+                'interpolate needs a template engine: pass engine= ("python" '
+                "only evaluates expressions)"
+            )
+        if not choice.is_template(value):
+            return value
+        expression = choice._bare_expression(value)
+        if expression is not None:
+            try:
+                return self.evaluate(expression, context, engine=choice, **overrides)
+            except NotImplementedError:
+                pass  # an engine with no expressions renders the text instead
+        return self._render_template(
+            self.compile(value, engine=choice), context, overrides
+        )
 
     def evaluate(
         self,
@@ -792,7 +854,7 @@ def evaluate(
     /,
     *,
     engine: "Optional[EngineChoice]" = None,
-    sandbox: bool = False,
+    sandbox: "Union[bool, SandboxLimits]" = False,
     undefined: str = "strict",
     **overrides: Any,
 ) -> Any:
@@ -803,10 +865,33 @@ def evaluate(
     every engine that is not `SANDBOXED`. A data name that is `engine`,
     `sandbox` or `undefined` goes in `context`.
     """
-    key = (bool(sandbox), undefined, _registry.registered_engines())
+    return _evaluator(sandbox, undefined).evaluate(
+        expression, context, engine=engine, **overrides
+    )
+
+
+def interpolate(
+    value: Any,
+    context: "Optional[Mapping[str, Any]]" = None,
+    /,
+    *,
+    engine: "Optional[EngineChoice]" = None,
+    sandbox: "Union[bool, SandboxLimits]" = False,
+    undefined: str = "strict",
+    **overrides: Any,
+) -> Any:
+    """`Loader.interpolate` on a loader that reads no file (see `evaluate`)."""
+    return _evaluator(sandbox, undefined).interpolate(
+        value, context, engine=engine, **overrides
+    )
+
+
+def _evaluator(sandbox: "Union[bool, SandboxLimits]", undefined: str) -> Loader:
+    """The cached loader `evaluate` and `interpolate` use, reading no file."""
+    key = (sandbox, undefined, _registry.registered_engines())
     loader = _EVALUATORS.get(key)
     if loader is None:
         loader = _EVALUATORS[key] = Loader(
             [_NoFiles()], sandbox=sandbox, undefined=undefined
         )
-    return loader.evaluate(expression, context, engine=engine, **overrides)
+    return loader

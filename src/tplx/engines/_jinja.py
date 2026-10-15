@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import functools
 import json
 from collections import OrderedDict
@@ -206,8 +207,8 @@ class JinjaTemplate(Template):
     """
 
     EXT = (".j2", ".jinja", ".jinja2")
-    MARKERS = ("{{", "{%", "{#")
-    EXPRESSION = ("{{", "}}")
+    _SYNTAX = re.compile(r"\{[{%#]")
+    _EXPRESSION = ("{{", "}}", "-", "-")
     SANDBOXED = True
 
     @classmethod

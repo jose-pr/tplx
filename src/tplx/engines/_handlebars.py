@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import logging
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -41,8 +42,8 @@ class HandlebarsTemplate(Template):
     """
 
     EXT = (".hbs", ".handlebars")
-    MARKERS = ("{{",)
-    EXPRESSION = ("{{", "}}")
+    _SYNTAX = re.compile(r"\{\{")
+    _EXPRESSION = ("{{", "}}", "{~", "}~")
     SANDBOXED = True
 
     @classmethod

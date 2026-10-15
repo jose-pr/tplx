@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 from typing import (
     TYPE_CHECKING,
@@ -66,40 +67,51 @@ class Template:
     #: True when a template cannot reach beyond the data it is given, so a
     #: `Loader(sandbox=True)` may use this engine for untrusted templates.
     SANDBOXED: ClassVar[bool] = False
-    #: Text that marks this engine's syntax (`("{{", "{%", "{#")` for Jinja);
-    #: `()` when it is not known, so every text may hold some.
-    MARKERS: ClassVar[Tuple[str, ...]] = ()
-    #: The delimiters around one expression whose value `evaluate` gives
-    #: (`("{{", "}}")`), or None when the engine has none.
-    EXPRESSION: ClassVar[Optional[Tuple[str, str]]] = None
+    #: What finds this engine's syntax in a text (`is_template`); None when it
+    #: is not known, so every text may hold some.
+    _SYNTAX: ClassVar[Optional["re.Pattern[str]"]] = None
+    #: One bare expression: its opening and closing delimiters, and the
+    #: whitespace-control characters each may carry (`("{{", "}}", "-", "-")`).
+    _EXPRESSION: ClassVar[Optional[Tuple[str, str, str, str]]] = None
 
     @classmethod
-    def has_syntax(cls, text: str) -> bool:
+    def is_template(cls, text: str) -> bool:
         """Could `text` hold this engine's syntax? False means it is plain text.
 
-        A cheap test with no compiling: True when a marker occurs (or the
-        engine names none), so a True may still be plain text.
+        A cheap test that compiles nothing: a True may still turn out plain.
+        An engine that does not say how to tell answers True; a plugin engine
+        overrides this to say.
         """
-        return not cls.MARKERS or any(marker in text for marker in cls.MARKERS)
+        pattern = cls._SYNTAX
+        return pattern is None or pattern.search(text) is not None
 
     @classmethod
-    def bare_expression(cls, text: str) -> Optional[str]:
-        """The expression when `text` is exactly one (`"{{ a.b }}"` gives `"a.b"`).
-
-        None when the engine has no `EXPRESSION`, or `text` holds anything
-        besides one, surrounding whitespace aside. Whitespace-control marks
-        (`{{- x -}}`) are part of what is returned.
-        """
-        if cls.EXPRESSION is None:
+    def _bare_expression(cls, text: str) -> Optional[str]:
+        """The expression when `text` is exactly one (`"{{ a.b }}"` is `"a.b"`), else None."""
+        spec = cls._EXPRESSION
+        if spec is None:
             return None
-        opening, closing = cls.EXPRESSION
-        stripped = text.strip()
-        if not (stripped.startswith(opening) and stripped.endswith(closing)):
+        pattern = cls.__dict__.get("_expression_pattern")
+        if pattern is None:
+            opening, closing, before, after = spec
+            pattern = re.compile(
+                r"\s*"
+                + re.escape(opening)
+                + (f"[{re.escape(before)}]*" if before else "")
+                + r"(?P<expression>.*?)"
+                + (f"[{re.escape(after)}]*" if after else "")
+                + re.escape(closing)
+                + r"\s*",
+                re.DOTALL,
+            )
+            cls._expression_pattern = pattern
+        found = pattern.fullmatch(text)
+        if found is None:
             return None
-        inner = stripped[len(opening) : len(stripped) - len(closing)]
-        if opening in inner or closing in inner or not inner.strip():
+        inner = found.group("expression").strip()
+        if not inner or spec[0] in inner or spec[1] in inner:
             return None
-        return inner.strip()
+        return inner
 
     def __init__(
         self,

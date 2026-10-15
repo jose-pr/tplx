@@ -20,6 +20,7 @@ from ._loader import (
     Names,
     Source,
     evaluate,
+    interpolate,
 )
 from ._registry import (
     ANY_SUFFIX,
@@ -83,6 +84,7 @@ __all__ = [
     "PYTHON",
     "DEFAULT_ENGINE",
     "evaluate",
+    "interpolate",
     "Names",
     "Candidates",
     "EngineChoice",

@@ -44,7 +44,7 @@ class CopyTemplate(Template):
     SANDBOXED = True
 
     @classmethod
-    def has_syntax(cls, text: str) -> bool:
+    def is_template(cls, text: str) -> bool:
         """Never: a copied file has no syntax."""
         return False
 

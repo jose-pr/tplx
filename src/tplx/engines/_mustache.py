@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import logging
 from collections.abc import Mapping as _Mapping
 from typing import Any, FrozenSet, Mapping, Optional
@@ -45,8 +46,8 @@ class MustacheTemplate(Template):
     """
 
     EXT = (".mustache",)
-    MARKERS = ("{{",)
-    EXPRESSION = ("{{", "}}")
+    _SYNTAX = re.compile(r"\{\{")
+    _EXPRESSION = ("{{", "}}", "{&", "}")
     SANDBOXED = True
 
     @classmethod

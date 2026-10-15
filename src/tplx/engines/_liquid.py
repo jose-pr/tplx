@@ -119,8 +119,8 @@ class LiquidTemplate(Template):
     """
 
     EXT = (".liquid",)
-    MARKERS = ("{{", "{%")
-    EXPRESSION = ("{{", "}}")
+    _SYNTAX = re.compile(r"\{[{%]")
+    _EXPRESSION = ("{{", "}}", "-", "-")
     SANDBOXED = True
 
     @classmethod

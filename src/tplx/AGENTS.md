@@ -167,6 +167,8 @@ a check that is true while it is unchanged.
 evaluate(expression, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
 Loader.evaluate(expression, context=None, /, *, engine=None, **overrides) -> Any
 Loader.compile(source, *, engine=None, name="<string>") -> Template
+interpolate(value, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
+Loader.interpolate(value, context=None, /, *, engine=None, **overrides) -> Any
 DEFAULT_ENGINE: EngineChoice = PYTHON   # "python"
 ```
 
@@ -191,6 +193,14 @@ DEFAULT_ENGINE: EngineChoice = PYTHON   # "python"
 - `compile` compiles `source` with `engine` (a template engine; `"python"`
   raises `ValueError`) and caches it per lookup by engine, source and name, at
   most `STRING_CACHE_SIZE` (256). Its includes resolve through the lookup.
+- `interpolate` fills one **value read from a document**: a value that is
+  not a `str`, or text in which the engine finds no syntax (`is_template`),
+  comes back as it is (the same object, nothing compiled); text that is
+  exactly one expression, whitespace and whitespace-control marks around it
+  allowed (`"{{ port + 1 }}"`, `"${PORT}"`, `"$port"` in Cheetah), gives the
+  expression's value with its type (`evaluate`); any other text renders to a
+  string (`compile`, cached) — `"Test {{ a + b }}"` is a string. An engine
+  with no expressions (ERB, EPP) renders. `engine` follows `compile`'s rule.
 - `Template.references() -> frozenset[str]`: the top-level names a template
   reads — Jinja, Liquid, Mustache, shell, envsubst; others raise
   `NotImplementedError`.
@@ -449,12 +459,8 @@ class Template:
     def references(self) -> frozenset[str]: ...                      # optional
     @classmethod
     def configured(cls, lookup, native) -> Any: ...
-    MARKERS: tuple[str, ...] = ()            # what marks the syntax; () unknown
-    EXPRESSION: tuple[str, str] | None = None  # one bare expression's delimiters
     @classmethod
-    def has_syntax(cls, text) -> bool: ...
-    @classmethod
-    def bare_expression(cls, text) -> str | None: ...
+    def is_template(cls, text) -> bool: ...
 ```
 
 - An engine implements `render_values`; `render` merges `data` and
@@ -463,15 +469,15 @@ class Template:
   has no includes.
 - Attributes: `source`, `lookup`, `origin`, `undefined` (the mode),
   `sandbox`, `is_up_to_date`.
-- `has_syntax(text)` is a cheap test with no compiling: False means `text` is
-  plain for this engine (a marker of `MARKERS` is absent); True may still be
-  plain, and an engine with no `MARKERS` answers True. `bare_expression(text)`
-  is the expression when `text` is exactly one `EXPRESSION` (`"{{ a.b }}"` →
-  `"a.b"`), else None — the text whose value `evaluate` should give typed.
-  Built in: Jinja `{{ {% {#` / `{{ }}`, Liquid `{{ {%`, Mustache and
-  Handlebars `{{`, Go its `DELIMITERS`, mako `${ <% % ##` / `${ }`, Cheetah
-  `$ #` / `${ }`, ERB and EPP `<%` / `<%= %>`, shell and envsubst their
-  `DELIMITER` / `DELIMITER{ }` (a subclass's delimiter follows); copy never.
+- `is_template(text)` is a cheap test that compiles nothing: False means
+  `text` is plain for this engine; True may still turn out plain, and an
+  engine that cannot tell (a plugin that does not override it) answers True.
+  Built in, each finds only its own syntax: Jinja `{{ {% {#`, Liquid `{{ {%`,
+  Mustache, Handlebars and Go an opening delimiter, mako `${`, `<%` or a `%`
+  / `##` line, Cheetah `$name`, `${` or `#directive`, ERB and EPP `<%`, shell
+  and envsubst the delimiter before `{` (or a name, where the bare form is
+  on; a subclass's delimiter follows); copy never. `cost $5` and `100%` are
+  plain for all of them.
 - `evaluate` and `references` raise `NotImplementedError` unless an engine
   implements them. `configured(lookup, native)` is `configure_native` for a
   class, what an engine's `evaluate` uses without an instance.

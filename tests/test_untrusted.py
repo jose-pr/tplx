@@ -410,36 +410,89 @@ def test_an_evaluated_value_past_the_limit_is_refused():
         )
 
 
-# -- what marks an engine's syntax ----------------------------------------------------
+# -- is_template and interpolate ------------------------------------------------------
+
+PLAIN_TEXT = ["web01.lan", "cost $5 per month", "100% done", "/srv/tftp"]
 
 
 @pytest.mark.parametrize(
-    "engine, plain, templated, bare, inner",
+    "engine, templated",
     [
-        (tplx.JinjaTemplate, "port: 80", "port: {{ p }}", "{{ a.b }}", "a.b"),
-        (tplx.LiquidTemplate, "port: 80", "{% if x %}", " {{ x }} ", "x"),
-        (tplx.GoTemplate, "port: 80", "{{.p}}", "{{ .a.b }}", ".a.b"),
-        (tplx.MakoTemplate, "port: 80", "${p}", "${p + 1}", "p + 1"),
-        (tplx.ERBTemplate, "port: 80", "<%= p %>", "<%= p %>", "p"),
-        (tplx.EnvsubstTemplate, "port: 80", "port: $P", "${P}", "P"),
-        (tplx.ShellTemplate, "port: 80", "%{P}", "%{P:-80}", "P:-80"),
+        (tplx.JinjaTemplate, ["{{ p }}", "{% if x %}y{% endif %}", "{# note #}"]),
+        (tplx.LiquidTemplate, ["{{ p }}", "{% if x %}y{% endif %}"]),
+        (tplx.GoTemplate, ["{{.p}}"]),
+        (tplx.MustacheTemplate, ["{{p}}"]),
+        (tplx.MakoTemplate, ["${p}", "<%include file='x'/>", "% if x:\n"]),
+        (tplx.CheetahTemplate, ["$p", "${p}", "#if $x"]),
+        (tplx.ERBTemplate, ["<%= p %>"]),
+        (tplx.EnvsubstTemplate, ["$P", "${P}"]),
+        (tplx.ShellTemplate, ["%{P}"]),
     ],
 )
-def test_an_engine_says_what_marks_its_syntax(engine, plain, templated, bare, inner):
-    assert not engine.has_syntax(plain)
-    assert engine.has_syntax(templated)
-    assert engine.bare_expression(bare) == inner
-    assert engine.bare_expression(f"{bare} and more") is None
+def test_is_template_finds_syntax_and_passes_plain_text(engine, templated):
+    for text in templated:
+        assert engine.is_template(text), text
+    for text in PLAIN_TEXT:
+        assert not engine.is_template(text), text
 
 
-def test_markers_follow_a_subclass_delimiter_and_copy_has_none():
+def test_is_template_follows_a_subclass_delimiter_and_copy_has_none():
     class Dollar(tplx.ShellTemplate):
         DELIMITER = "$"
 
     class Square(tplx.GoTemplate):
         DELIMITERS = ("[[", "]]")
 
-    assert Dollar.MARKERS == ("$",) and Dollar.bare_expression("${A}") == "A"
-    assert Square.has_syntax("[[.x]]") and not Square.has_syntax("{{.x}}")
-    assert not tplx.CopyTemplate.has_syntax("{{ anything }}")
-    assert tplx.Template.has_syntax("plain")  # unknown: every text may hold some
+    assert Dollar.is_template("${A}") and not Dollar.is_template("%{A}")
+    assert Square.is_template("[[.x]]") and not Square.is_template("{{.x}}")
+    assert not tplx.CopyTemplate.is_template("{{ anything }}")
+    assert tplx.Template.is_template("plain")  # unknown: every text may hold some
+
+
+@pytest.mark.parametrize(
+    "module, engine, value, expected",
+    [
+        ("jinja2", "jinja", "{{ port + 1 }}", 81),
+        ("jinja2", "jinja", " {{- xs | sort -}} ", [1, 3]),
+        ("jinja2", "jinja", "Test {{ host }}", "Test web01"),
+        ("jinja2", "jinja", "{% if port > 1 %}big{% endif %}", "big"),
+        ("liquid", "liquid", "{{ xs | sort }}", [1, 3]),
+        ("gotpl", "go", "{{ .port }}", 80),
+        ("chevron", "mustache", "{{port}}", 80),
+        ("chevron", "mustache", "{{{host}}}", "web01"),
+        ("mako", "mako", "${port * 2}", 160),
+        ("Cheetah", "cheetah", "$port", 80),
+        (None, "envsubst", "${HOST}:${PORT}", "web01:80"),
+    ],
+)
+def test_interpolate_keeps_one_expressions_type_and_renders_the_rest(
+    module, engine, value, expected
+):
+    if module:
+        pytest.importorskip(module)
+    context = {"port": 80, "host": "web01", "xs": [3, 1]}
+    assert tplx.interpolate(value, context, engine=engine) == expected
+
+
+def test_interpolate_returns_plain_values_as_they_are(monkeypatch):
+    compiled = []
+    real = tplx.Lookup.compile
+    monkeypatch.setattr(
+        tplx.Lookup,
+        "compile",
+        lambda self, *a, **k: compiled.append(a) or real(self, *a, **k),
+    )
+    for value in (80, None, ["{{ x }}"], "web01.lan", "cost $5"):
+        assert tplx.interpolate(value, engine="shell") is value
+    assert compiled == []
+
+
+def test_interpolate_honours_the_sandbox_and_needs_a_template_engine():
+    pytest.importorskip("jinja2")
+    assert tplx.interpolate("{{ p * 2 }}", {"p": 4}, engine="jinja", sandbox=True) == 8
+    with pytest.raises(SandboxError):
+        tplx.interpolate('{{ "x" * 5000000 }}', engine="jinja", sandbox=True)
+    with pytest.raises(SandboxError):
+        tplx.interpolate("${p}", {"p": 1}, engine="mako", sandbox=True)
+    with pytest.raises(ValueError, match="engine"):
+        tplx.interpolate("x {{ y }}")  # the default "python" cannot render text

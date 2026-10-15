@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `Template.MARKERS`, `Template.EXPRESSION`, `has_syntax(text)` and
-  `bare_expression(text)`: what marks an engine's syntax, to skip plain text
-  without compiling it, and the one-expression form whose value `evaluate`
-  gives typed. Set on every built-in engine.
+- `tplx.interpolate`, `Loader.interpolate` and `Lookup.interpolate`: fill
+  one value read from a document. Plain values and text with no syntax come
+  back as they are, text that is one expression gives its value with its
+  type, and any other text renders to a string.
+- `Template.is_template(text)`: does a text hold the engine's syntax, without
+  compiling it; every built-in engine finds only its own.
 
 ### Fixed
 

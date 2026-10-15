@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import OrderedDict
 from contextvars import ContextVar
 from typing import Any, Dict, Mapping, Optional, Tuple
@@ -97,6 +98,10 @@ def _bridge(
     return _Bridge, prefix
 
 
+#: A placeholder alone: `$a.b` or `${a.b}`, whitespace around it.
+_BARE = re.compile(r"\s*\$(\{)?(?P<name>[A-Za-z_][\w.]*)(?(1)\})\s*")
+
+
 class CheetahTemplate(Template):
     """A Cheetah template, rendered by CT3. Needs the **`cheetah` extra**.
 
@@ -113,8 +118,13 @@ class CheetahTemplate(Template):
     """
 
     EXT = (".cheetah",)
-    MARKERS = ("$", "#")
-    EXPRESSION = ("${", "}")
+    _SYNTAX = re.compile(r"\$[{A-Za-z_]|#[A-Za-z]")
+
+    @classmethod
+    def _bare_expression(cls, text: str) -> Optional[str]:
+        """`$name` or `${name}` alone, as the expression `$name`."""
+        found = _BARE.fullmatch(text)
+        return "$" + found.group("name") if found else None
 
     @classmethod
     def bridge(cls, lookup: "Optional[Lookup]" = None) -> Tuple[type, str]:

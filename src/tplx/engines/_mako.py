@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import logging
 from collections import OrderedDict
 from io import StringIO
@@ -116,8 +117,8 @@ class MakoTemplate(Template):
     """
 
     EXT = (".mako",)
-    MARKERS = ("${", "<%", "%", "##")
-    EXPRESSION = ("${", "}")
+    _SYNTAX = re.compile(r"\$\{|<%|^[ \t]*(?:%|##)", re.MULTILINE)
+    _EXPRESSION = ("${", "}", "", "")
 
     @classmethod
     def template_lookup(cls, lookup: "Optional[Lookup]" = None) -> Any:

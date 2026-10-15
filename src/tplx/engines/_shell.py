@@ -234,16 +234,28 @@ class ShellTemplate(Template):
     SANDBOXED = True
     #: What introduces a placeholder. Doubling it escapes it (`escape`).
     DELIMITER: ClassVar[str] = "%"
-    MARKERS = ("%",)
-    EXPRESSION = ("%{", "}")
+    _EXPRESSION = ("%{", "}", "", "")
 
     def __init_subclass__(cls, **keywords: Any) -> None:
         super().__init_subclass__(**keywords)
-        # A subclass with another delimiter has other markers, unless it says.
-        if "MARKERS" not in cls.__dict__:
-            cls.MARKERS = (str(cls.DELIMITER),)
-        if "EXPRESSION" not in cls.__dict__:
-            cls.EXPRESSION = (str(cls.DELIMITER) + "{", "}")
+        # A subclass with another delimiter has another expression, unless it says.
+        if "_EXPRESSION" not in cls.__dict__:
+            cls._EXPRESSION = (str(cls.DELIMITER) + "{", "}", "", "")
+
+    @classmethod
+    def is_template(cls, text: str) -> bool:
+        """Does `text` hold a placeholder: the delimiter before `{` (or a name,
+        when the bare form is on)? A doubled delimiter alone does not count."""
+        pattern = cls.__dict__.get("_syntax_pattern")
+        if pattern is None:
+            form, _ = cls.syntax()
+            delimiter = re.escape(str(cls.DELIMITER))
+            starts = [r"\{"] if form in ("braced", "all") else []
+            if form in ("unbraced", "all"):
+                starts.append("[A-Za-z_]")
+            pattern = re.compile(delimiter + "(?:" + "|".join(starts) + ")")
+            cls._syntax_pattern = pattern
+        return pattern.search(text) is not None
 
     #: One of `PATTERNS`: `braced` for `%{NAME}` only, `unbraced` for `%NAME`
     #: only, `all` for both.
