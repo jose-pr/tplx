@@ -210,3 +210,26 @@ def test_json_writes_a_non_finite_number_as_text():
     document = ENCODER.json({"a": float("nan"), "b": float("inf")})
     assert document == {"a": "nan", "b": "inf"}
     json.dumps(document, allow_nan=False)
+
+
+def _aliased(levels):
+    """`levels` nested pairs of one list: few lists, 2**levels paths."""
+    shared = [1]
+    for _ in range(levels):
+        shared = [shared, shared]
+    return shared
+
+
+def test_a_shared_list_is_converted_once_and_stays_shared():
+    shared = [Point(1, 2)]
+    view = ENCODER.view({"a": shared, "b": shared, "c": (shared, shared)}, plain=True)
+    assert view["a"] is view["b"] is view["c"][0] is view["c"][1]
+    deep = ENCODER.view({"big": _aliased(40)})  # 2**40 paths, 41 lists
+    assert deep["big"][0] is deep["big"][1]
+
+
+def test_a_list_that_contains_itself_is_presented_as_one():
+    loop = [1]
+    loop.append(loop)
+    converted = ENCODER.view({"l": loop}, plain=True)["l"]
+    assert converted[0] == 1 and converted[1] is converted

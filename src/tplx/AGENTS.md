@@ -243,6 +243,8 @@ DataEncoder(*, expose=(), max_depth=8)
 - `view(values, *, plain=False) -> dict` — for Liquid, Handlebars, Mustache: a structure
   becomes a `DataView` (a lazy, read-only `Mapping` of its items or
   attributes; dunder names hidden), a list stays a list, a value as it is.
+  A list or tuple met twice (shared, as YAML aliases make them, or
+  containing itself) is converted once and the copy shared.
 - `json(values)` — for ERB, EPP: a JSON-serialisable copy; a value that is not
   a JSON scalar (a NaN or an infinity included) is written as its `str()`.
 - `flatten(values) -> dict[str, str]` — for the shell engine: one level,

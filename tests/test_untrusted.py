@@ -300,3 +300,22 @@ def test_the_capture_hook_is_inert_outside_an_evaluation(tree):
     pytest.importorskip("liquid")
     tree.write("p.liquid", "[{{ 'x' | tplx_capture }}]")
     assert Loader([tree.root], sandbox=True).render("p") == "[]"
+
+
+@pytest.mark.parametrize(
+    "module, engine, sandbox",
+    [
+        ("jinja2", "jinja", True),
+        ("liquid", "liquid", False),
+        ("liquid", "liquid", True),
+    ],
+)
+def test_shared_and_cyclic_lists_cost_one_visit(module, engine, sandbox):
+    pytest.importorskip(module)
+    shared = [1]
+    for _ in range(40):
+        shared = [shared, shared]
+    loop = [1]
+    loop.append(loop)
+    loader = Loader([], sandbox=sandbox)
+    assert loader.evaluate("1", {"big": shared, "loop": loop}, engine=engine) == 1

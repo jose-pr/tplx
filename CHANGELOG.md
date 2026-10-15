@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the defaults (1,000,000 characters, 100,000 iterations, depth 100). Going
   over raises `SandboxError`.
 
+### Fixed
+
+- Presenting data to Liquid, Mustache, Handlebars and any sandboxed engine
+  converted a list every time it was reached: a shared list (YAML aliases)
+  cost time exponential in its nesting, and a list containing itself exceeded
+  the recursion limit. Each distinct list is now converted once.
+
 ### Changed
 
 - In a sandbox only a function the caller passes stays callable; a class or a

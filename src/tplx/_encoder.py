@@ -221,8 +221,16 @@ class DataEncoder:
         `plain` (a sandbox's): a value that is not in `PLAIN` reaches the template
         as its text, so none of its methods do; a function the caller put in
         the data stays callable (a callable object does not), but an
-        object's methods are hidden.
+        object's methods are hidden. A list or tuple met twice (shared, as YAML
+        aliases make them, or containing itself) is converted once and the
+        copy shared, so the cost is one visit per distinct list.
         """
+        return self._wrap(value, plain, {})
+
+    def _wrap(self, value: Any, plain: bool, memo: Dict[int, Any]) -> Any:
+        """`wrap`, remembering the lists already converted in `memo` (by id)."""
+        if isinstance(value, (list, tuple)) and id(value) in memo:
+            return memo[id(value)]
         found = self.structure(value)
         if isinstance(found, DataView):
             if plain and not object.__getattribute__(found, "_plain"):
@@ -231,7 +239,10 @@ class DataEncoder:
         if isinstance(found, Mapping):
             return DataView(found, self, plain)
         if isinstance(found, list):
-            return [self.wrap(item, plain=plain) for item in found]
+            converted: List[Any] = []
+            memo[id(value)] = converted  # before the items: a cycle finds it
+            converted.extend(self._wrap(item, plain, memo) for item in found)
+            return converted
         if plain and not isinstance(found, self.PLAIN) and not _is_function(found):
             return str(found)
         return found
@@ -240,8 +251,9 @@ class DataEncoder:
         self, values: "Mapping[str, Any]", *, plain: bool = False
     ) -> Dict[str, Any]:
         """The top-level names of a data template; `plain` in a sandbox."""
+        memo: Dict[int, Any] = {}
         return {
-            str(key): self.wrap(value, plain=plain) for key, value in values.items()
+            str(key): self._wrap(value, plain, memo) for key, value in values.items()
         }
 
     def _items(self, mapping: "Mapping[Any, Any]") -> Iterator[Tuple[str, Any]]:
