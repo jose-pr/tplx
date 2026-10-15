@@ -45,6 +45,8 @@ class MustacheTemplate(Template):
     """
 
     EXT = (".mustache",)
+    MARKERS = ("{{",)
+    EXPRESSION = ("{{", "}}")
     SANDBOXED = True
 
     @classmethod

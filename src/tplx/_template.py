@@ -66,6 +66,40 @@ class Template:
     #: True when a template cannot reach beyond the data it is given, so a
     #: `Loader(sandbox=True)` may use this engine for untrusted templates.
     SANDBOXED: ClassVar[bool] = False
+    #: Text that marks this engine's syntax (`("{{", "{%", "{#")` for Jinja);
+    #: `()` when it is not known, so every text may hold some.
+    MARKERS: ClassVar[Tuple[str, ...]] = ()
+    #: The delimiters around one expression whose value `evaluate` gives
+    #: (`("{{", "}}")`), or None when the engine has none.
+    EXPRESSION: ClassVar[Optional[Tuple[str, str]]] = None
+
+    @classmethod
+    def has_syntax(cls, text: str) -> bool:
+        """Could `text` hold this engine's syntax? False means it is plain text.
+
+        A cheap test with no compiling: True when a marker occurs (or the
+        engine names none), so a True may still be plain text.
+        """
+        return not cls.MARKERS or any(marker in text for marker in cls.MARKERS)
+
+    @classmethod
+    def bare_expression(cls, text: str) -> Optional[str]:
+        """The expression when `text` is exactly one (`"{{ a.b }}"` gives `"a.b"`).
+
+        None when the engine has no `EXPRESSION`, or `text` holds anything
+        besides one, surrounding whitespace aside. Whitespace-control marks
+        (`{{- x -}}`) are part of what is returned.
+        """
+        if cls.EXPRESSION is None:
+            return None
+        opening, closing = cls.EXPRESSION
+        stripped = text.strip()
+        if not (stripped.startswith(opening) and stripped.endswith(closing)):
+            return None
+        inner = stripped[len(opening) : len(stripped) - len(closing)]
+        if opening in inner or closing in inner or not inner.strip():
+            return None
+        return inner.strip()
 
     def __init__(
         self,

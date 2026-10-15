@@ -116,6 +116,8 @@ class MakoTemplate(Template):
     """
 
     EXT = (".mako",)
+    MARKERS = ("${", "<%", "%", "##")
+    EXPRESSION = ("${", "}")
 
     @classmethod
     def template_lookup(cls, lookup: "Optional[Lookup]" = None) -> Any:

@@ -234,6 +234,16 @@ class ShellTemplate(Template):
     SANDBOXED = True
     #: What introduces a placeholder. Doubling it escapes it (`escape`).
     DELIMITER: ClassVar[str] = "%"
+    MARKERS = ("%",)
+    EXPRESSION = ("%{", "}")
+
+    def __init_subclass__(cls, **keywords: Any) -> None:
+        super().__init_subclass__(**keywords)
+        # A subclass with another delimiter has other markers, unless it says.
+        if "MARKERS" not in cls.__dict__:
+            cls.MARKERS = (str(cls.DELIMITER),)
+        if "EXPRESSION" not in cls.__dict__:
+            cls.EXPRESSION = (str(cls.DELIMITER) + "{", "}")
 
     #: One of `PATTERNS`: `braced` for `%{NAME}` only, `unbraced` for `%NAME`
     #: only, `all` for both.

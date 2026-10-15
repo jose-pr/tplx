@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `Template.MARKERS`, `Template.EXPRESSION`, `has_syntax(text)` and
+  `bare_expression(text)`: what marks an engine's syntax, to skip plain text
+  without compiling it, and the one-expression form whose value `evaluate`
+  gives typed. Set on every built-in engine.
+
 ### Fixed
 
 - A sandboxed template or expression could make the process allocate without

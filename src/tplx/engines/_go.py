@@ -81,6 +81,16 @@ class GoTemplate(Template):
     SANDBOXED = True
     #: The action delimiters, as Go's `Delims`.
     DELIMITERS: Tuple[str, str] = ("{{", "}}")
+    MARKERS = ("{{",)
+    EXPRESSION = ("{{", "}}")
+
+    def __init_subclass__(cls, **keywords: Any) -> None:
+        super().__init_subclass__(**keywords)
+        # A subclass with other delimiters has other markers, unless it says.
+        if "MARKERS" not in cls.__dict__:
+            cls.MARKERS = (cls.DELIMITERS[0],)
+        if "EXPRESSION" not in cls.__dict__:
+            cls.EXPRESSION = tuple(cls.DELIMITERS)  # type: ignore[assignment]
 
     @classmethod
     def _environment(

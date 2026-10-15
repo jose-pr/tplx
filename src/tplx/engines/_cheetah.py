@@ -113,6 +113,8 @@ class CheetahTemplate(Template):
     """
 
     EXT = (".cheetah",)
+    MARKERS = ("$", "#")
+    EXPRESSION = ("${", "}")
 
     @classmethod
     def bridge(cls, lookup: "Optional[Lookup]" = None) -> Tuple[type, str]:

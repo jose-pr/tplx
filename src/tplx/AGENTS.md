@@ -449,6 +449,12 @@ class Template:
     def references(self) -> frozenset[str]: ...                      # optional
     @classmethod
     def configured(cls, lookup, native) -> Any: ...
+    MARKERS: tuple[str, ...] = ()            # what marks the syntax; () unknown
+    EXPRESSION: tuple[str, str] | None = None  # one bare expression's delimiters
+    @classmethod
+    def has_syntax(cls, text) -> bool: ...
+    @classmethod
+    def bare_expression(cls, text) -> str | None: ...
 ```
 
 - An engine implements `render_values`; `render` merges `data` and
@@ -457,6 +463,15 @@ class Template:
   has no includes.
 - Attributes: `source`, `lookup`, `origin`, `undefined` (the mode),
   `sandbox`, `is_up_to_date`.
+- `has_syntax(text)` is a cheap test with no compiling: False means `text` is
+  plain for this engine (a marker of `MARKERS` is absent); True may still be
+  plain, and an engine with no `MARKERS` answers True. `bare_expression(text)`
+  is the expression when `text` is exactly one `EXPRESSION` (`"{{ a.b }}"` →
+  `"a.b"`), else None — the text whose value `evaluate` should give typed.
+  Built in: Jinja `{{ {% {#` / `{{ }}`, Liquid `{{ {%`, Mustache and
+  Handlebars `{{`, Go its `DELIMITERS`, mako `${ <% % ##` / `${ }`, Cheetah
+  `$ #` / `${ }`, ERB and EPP `<%` / `<%= %>`, shell and envsubst their
+  `DELIMITER` / `DELIMITER{ }` (a subclass's delimiter follows); copy never.
 - `evaluate` and `references` raise `NotImplementedError` unless an engine
   implements them. `configured(lookup, native)` is `configure_native` for a
   class, what an engine's `evaluate` uses without an instance.

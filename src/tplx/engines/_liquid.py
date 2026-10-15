@@ -119,6 +119,8 @@ class LiquidTemplate(Template):
     """
 
     EXT = (".liquid",)
+    MARKERS = ("{{", "{%")
+    EXPRESSION = ("{{", "}}")
     SANDBOXED = True
 
     @classmethod

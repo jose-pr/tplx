@@ -41,6 +41,8 @@ class HandlebarsTemplate(Template):
     """
 
     EXT = (".hbs", ".handlebars")
+    MARKERS = ("{{",)
+    EXPRESSION = ("{{", "}}")
     SANDBOXED = True
 
     @classmethod

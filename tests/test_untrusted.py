@@ -409,3 +409,37 @@ def test_an_evaluated_value_past_the_limit_is_refused():
             "xs", {"xs": list(range(5000))}, engine="mustache"
         )
 
+
+# -- what marks an engine's syntax ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "engine, plain, templated, bare, inner",
+    [
+        (tplx.JinjaTemplate, "port: 80", "port: {{ p }}", "{{ a.b }}", "a.b"),
+        (tplx.LiquidTemplate, "port: 80", "{% if x %}", " {{ x }} ", "x"),
+        (tplx.GoTemplate, "port: 80", "{{.p}}", "{{ .a.b }}", ".a.b"),
+        (tplx.MakoTemplate, "port: 80", "${p}", "${p + 1}", "p + 1"),
+        (tplx.ERBTemplate, "port: 80", "<%= p %>", "<%= p %>", "p"),
+        (tplx.EnvsubstTemplate, "port: 80", "port: $P", "${P}", "P"),
+        (tplx.ShellTemplate, "port: 80", "%{P}", "%{P:-80}", "P:-80"),
+    ],
+)
+def test_an_engine_says_what_marks_its_syntax(engine, plain, templated, bare, inner):
+    assert not engine.has_syntax(plain)
+    assert engine.has_syntax(templated)
+    assert engine.bare_expression(bare) == inner
+    assert engine.bare_expression(f"{bare} and more") is None
+
+
+def test_markers_follow_a_subclass_delimiter_and_copy_has_none():
+    class Dollar(tplx.ShellTemplate):
+        DELIMITER = "$"
+
+    class Square(tplx.GoTemplate):
+        DELIMITERS = ("[[", "]]")
+
+    assert Dollar.MARKERS == ("$",) and Dollar.bare_expression("${A}") == "A"
+    assert Square.has_syntax("[[.x]]") and not Square.has_syntax("{{.x}}")
+    assert not tplx.CopyTemplate.has_syntax("{{ anything }}")
+    assert tplx.Template.has_syntax("plain")  # unknown: every text may hold some

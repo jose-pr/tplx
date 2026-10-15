@@ -204,6 +204,8 @@ class ERBTemplate(SubprocessTemplate):
     """
 
     EXT = (".erb",)
+    MARKERS = ("<%",)
+    EXPRESSION = ("<%=", "%>")
     COMMAND = "ruby"
     ENV_VAR = "TPLX_RUBY"
 
@@ -221,6 +223,8 @@ class EPPTemplate(SubprocessTemplate):
     """
 
     EXT = (".epp",)
+    MARKERS = ("<%",)
+    EXPRESSION = ("<%=", "%>")
     COMMAND = "puppet"
     ENV_VAR = "TPLX_PUPPET"
     NEWLINES = "lf"

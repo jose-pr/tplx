@@ -43,6 +43,11 @@ class CopyTemplate(Template):
     BINARY = True
     SANDBOXED = True
 
+    @classmethod
+    def has_syntax(cls, text: str) -> bool:
+        """Never: a copied file has no syntax."""
+        return False
+
     def __init__(
         self,
         source: "Union[bytes, str]",

@@ -206,6 +206,8 @@ class JinjaTemplate(Template):
     """
 
     EXT = (".j2", ".jinja", ".jinja2")
+    MARKERS = ("{{", "{%", "{#")
+    EXPRESSION = ("{{", "}}")
     SANDBOXED = True
 
     @classmethod
