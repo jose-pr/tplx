@@ -14,7 +14,7 @@ Documentation: <https://jose-pr.github.io/tplx/>.
 ## Features
 
 - **One call for every engine** — Jinja, mako, Liquid, Handlebars, Mustache,
-  ERB, EPP, envsubst (as GNU, a8m or drone) and a `%{NAME}` shell-style
+  Go's `text/template`, ERB, EPP, envsubst (as GNU, a8m or drone) and a `%{NAME}` shell-style
   engine, each rendering the same data.
 - **Name by stem, dispatch by suffix** — a caller asks for `boot.cfg`; the file
   found decides the engine.
@@ -47,6 +47,7 @@ pip install tplx
 | Liquid | `.liquid` | `tplx[liquid]` | strict, lenient, debug | `{% include %}` `{% render %}` |
 | Handlebars | `.hbs` `.handlebars` | `tplx[handlebars]` | always empty | `{{> name}}` |
 | Mustache | `.mustache` | `tplx[mustache]` | always empty | `{{> name}}` |
+| Go (`text/template`) | `.tmpl` `.gotmpl` | `tplx[go]`, Python 3.11+ | strict; otherwise `<no value>` | `{{template "name" .}}` |
 | ERB | `.erb` | `ruby` on `PATH` | Ruby's `nil` | — |
 | EPP | `.epp` | `puppet` on `PATH` | Puppet's `undef` | — |
 | shell (`%{NAME}`) | `.shtpl` | — | strict, lenient, debug | — |
