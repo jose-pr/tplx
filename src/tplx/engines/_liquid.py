@@ -114,7 +114,7 @@ class LiquidTemplate(Template):
     `{% render %}` resolve through the `Lookup` that loaded the file, exactly
     as a render would: a Liquid file is parsed by Liquid, any other is rendered
     by its own engine with the render's data and its output inserted. All
-    three undefined modes apply. `evaluate_expression` takes a Liquid expression with its
+    three undefined modes apply. `eval` takes a Liquid expression with its
     filters (`xs | sort`).
     """
 
@@ -139,7 +139,7 @@ class LiquidTemplate(Template):
         return lookup.state(("liquid", cls, mode), factory)
 
     @classmethod
-    def evaluate_expression(
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",

@@ -131,7 +131,7 @@ class GoTemplate(Template):
         return dict(values)
 
     @classmethod
-    def evaluate_expression(
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",

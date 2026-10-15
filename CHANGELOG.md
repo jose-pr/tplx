@@ -16,22 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- `tplx.evaluate` and `Loader.evaluate` evaluate a **template**, as a
-  template engine should, where they took a bare expression:
-  `"{{ port + 1 }}"` is `81`, `"Test {{ port }}"` is `"Test 80"`, and text
-  with no syntax comes back as it is. A bare expression (`"port + 1"`) is now
-  plain text.
+- `tplx.evaluate` and `Loader.evaluate` took a bare expression where a
+  template engine takes a template. They are now `tplx.eval` and
+  `Loader.eval`, and the engine decides (`Template.eval`): `"{{ port + 1 }}"`
+  is `81`, `"Test {{ port }}"` is `"Test 80"`, and text with no syntax comes
+  back as it is, compiled never.
 - The default engine was Python's `eval`, which ran code and no template;
   `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
   `tplx.PYTHON` are gone.
-- An engine's own hook is `Template.evaluate_expression`, so `evaluate`
-  means one thing; a plugin engine that defined `evaluate` renames it.
+- An engine's `Template.evaluate(expression)` is gone: `Template.eval(text)`
+  takes the whole text, and a plugin engine that gave typed values overrides
+  `_evaluate_expression`.
 
 - A sandboxed template or expression could make the process allocate without
   bound (`"x" * 10**10`, `[0] * 50000000`, `"x".center(n)`, a format width,
   Go's `printf` width): `SandboxLimits.max_output` now bounds every value a
   sandboxed template builds, refused before it is allocated, and every value
-  `evaluate` returns.
+  `eval` returns.
 
 ## [0.1.5] - 2026-10-15
 

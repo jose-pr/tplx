@@ -315,7 +315,7 @@ class ShellTemplate(Template):
         return compiled
 
     @classmethod
-    def evaluate_expression(
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",
@@ -526,7 +526,7 @@ class ShellTemplate(Template):
 class DollarTemplate(ShellTemplate):
     """The shell syntax with `$`: `${HOST}`, `${PORT:-80}`, `${PATH//:/ }`, `$$`.
 
-    `tplx.DEFAULT_ENGINE`, for `evaluate` and `compile` given no engine. Only
+    `tplx.DEFAULT_ENGINE`, for `eval` and `compile` given no engine. Only
     the braced form, so `cost $5` and `$HOME` are text. Not registered: no
     file suffix picks it (`.shtpl` is `%`, `.envsubst` is `EnvsubstTemplate`).
     """

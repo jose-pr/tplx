@@ -1,4 +1,4 @@
-"""The sandboxed loader, `evaluate`, `references` and `compile`."""
+"""The sandboxed loader, `eval`, `references` and `compile`."""
 
 import importlib.util
 import pathlib
@@ -58,7 +58,7 @@ def test_jinja_in_a_sandbox_refuses_unsafe_attributes(tree):
     with pytest.raises(SandboxError, match="unsafe"):
         Loader([tree.root], sandbox=True).render("page")
     with pytest.raises(SandboxError):
-        tplx.evaluate("{{ ''.__class__.__mro__ }}", engine="jinja", sandbox=True)
+        tplx.eval("{{ ''.__class__.__mro__ }}", engine="jinja", sandbox=True)
 
 
 def test_go_in_a_sandbox_never_calls_a_method(tree):
@@ -97,33 +97,33 @@ def test_sandboxed_engines_render(tree, module, name, source, expected):
     assert Loader([tree.root], sandbox=True).render(name, CTX) == expected
 
 
-# -- evaluate -------------------------------------------------------------------------
+# -- eval -----------------------------------------------------------------------------
 
 
 def test_the_default_engine_is_the_shell_syntax_with_a_dollar():
     assert tplx.DEFAULT_ENGINE is tplx.DollarTemplate
-    assert tplx.evaluate("${A_B}", CTX) == "21"
+    assert tplx.eval("${A_B}", CTX) == "21"
     url = "http://${HOST:-localhost}:${PORT}/"
-    assert tplx.evaluate(url, {"port": 80}) == "http://localhost:80/"
-    assert tplx.evaluate("cost $5, $HOME", CTX) == "cost $5, $HOME"
+    assert tplx.eval(url, {"port": 80}) == "http://localhost:80/"
+    assert tplx.eval("cost $5, $HOME", CTX) == "cost $5, $HOME"
     with pytest.raises(UndefinedError):
-        tplx.evaluate("${NOPE}", CTX)
+        tplx.eval("${NOPE}", CTX)
 
 
 def test_the_default_runs_in_a_sandbox_and_can_be_set(monkeypatch):
-    assert tplx.evaluate("${N}", CTX, sandbox=True) == "2"
+    assert tplx.eval("${N}", CTX, sandbox=True) == "2"
     pytest.importorskip("jinja2")
     monkeypatch.setattr(tplx, "DEFAULT_ENGINE", "jinja")
-    assert tplx.evaluate("{{ xs | sort }}", CTX) == [1, 2, 3]
+    assert tplx.eval("{{ xs | sort }}", CTX) == [1, 2, 3]
 
 
 def test_an_engine_is_a_class_a_name_or_a_suffix():
     pytest.importorskip("jinja2")
     for engine in (tplx.JinjaTemplate, "jinja", "j2", ".jinja2"):
-        assert tplx.evaluate("{{ a.b * n }}", CTX, engine=engine) == 42
+        assert tplx.eval("{{ a.b * n }}", CTX, engine=engine) == 42
     for name in ("nosuch", "python"):
         with pytest.raises(ValueError, match="no engine is named"):
-            tplx.evaluate("{{ 1 }}", engine=name)
+            tplx.eval("{{ 1 }}", engine=name)
 
 
 @pytest.mark.parametrize(
@@ -144,7 +144,7 @@ def test_each_engine_evaluates_one_expression_in_its_own_syntax(
 ):
     if module:
         pytest.importorskip(module)
-    assert tplx.evaluate(template, CTX, engine=engine) == expected
+    assert tplx.eval(template, CTX, engine=engine) == expected
 
 
 def test_an_engine_without_expressions_renders_the_template():
@@ -155,18 +155,26 @@ def test_an_engine_without_expressions_renders_the_template():
         def render_values(self, values):
             return self.source.upper()
 
-    assert tplx.evaluate("<x>", engine=Upper) == "<X>"
-    assert tplx.evaluate("plain", engine=Upper) == "plain"
+    assert tplx.eval("<x>", engine=Upper) == "<X>"
+    assert tplx.eval("plain", engine=Upper) == "plain"
     with pytest.raises(NotImplementedError):
-        tplx.ERBTemplate.evaluate_expression("1", {})
+        tplx.ERBTemplate._evaluate_expression("1", {})
 
 
-def test_evaluate_sees_the_loaders_globals_and_mode():
-    loader = Loader([], globals={"g": 10}, undefined="lenient")
-    assert loader.evaluate("${G}-${N}", CTX) == "10-2"
+def test_the_engine_class_decides_without_a_loader():
+    assert tplx.DollarTemplate.eval("${A}-${B}", {"a": 1, "b": 2}) == "1-2"
+    assert tplx.DollarTemplate.eval("no syntax", {}) == "no syntax"
     if _has("jinja2"):
-        assert loader.evaluate("{{ g + n }}", CTX, engine="jinja") == 12
-        assert loader.evaluate("{{ missing }}", engine="jinja") is None
+        assert tplx.JinjaTemplate.eval("{{ x + 1 }}", {"x": 1}) == 2
+        assert tplx.JinjaTemplate.eval("x={{ x }}", {"x": 1}) == "x=1"
+
+
+def test_eval_sees_the_loaders_globals_and_mode():
+    loader = Loader([], globals={"g": 10}, undefined="lenient")
+    assert loader.eval("${G}-${N}", CTX) == "10-2"
+    if _has("jinja2"):
+        assert loader.eval("{{ g + n }}", CTX, engine="jinja") == 12
+        assert loader.eval("{{ missing }}", engine="jinja") is None
 
 
 # -- references and compile -----------------------------------------------------------
@@ -328,7 +336,7 @@ def test_shared_and_cyclic_lists_cost_one_visit(module, engine, sandbox):
     loop = [1]
     loop.append(loop)
     loader = Loader([], sandbox=sandbox)
-    assert loader.evaluate("{{ 1 }}", {"big": shared, "loop": loop}, engine=engine) == 1
+    assert loader.eval("{{ 1 }}", {"big": shared, "loop": loop}, engine=engine) == 1
 
 
 # -- a sandbox refuses before it allocates past max_output --------------------------
@@ -360,7 +368,7 @@ TIGHT = SandboxLimits(max_output=1000)
 def test_jinja_refuses_a_value_past_the_limit_before_building_it(expression):
     pytest.importorskip("jinja2")
     with pytest.raises(SandboxError, match="larger than the sandbox allows"):
-        Loader([], sandbox=TIGHT).evaluate("{{ " + expression + " }}", engine="jinja")
+        Loader([], sandbox=TIGHT).eval("{{ " + expression + " }}", engine="jinja")
 
 
 def test_a_value_grown_step_by_step_in_a_loop_stops_at_the_limit(tree):
@@ -379,29 +387,29 @@ def test_ordinary_sandboxed_expressions_still_work():
     pytest.importorskip("jinja2")
     loader = Loader([], sandbox=TIGHT)
     assert (
-        loader.evaluate('{{ "ab" * 3 ~ "{:>4}".format(1) }}', engine="jinja")
+        loader.eval('{{ "ab" * 3 ~ "{:>4}".format(1) }}', engine="jinja")
         == "ababab   1"
     )
-    assert loader.evaluate("{{ 2 ** 100 }}", engine="jinja") == 2**100
+    assert loader.eval("{{ 2 ** 100 }}", engine="jinja") == 2**100
 
 
 def test_go_printf_refuses_a_width_past_the_limit():
     pytest.importorskip("gotpl")
     loader = Loader([], sandbox=TIGHT)
-    assert loader.evaluate('{{ printf "%5d" 1 }}', engine="go") == "    1"
+    assert loader.eval('{{ printf "%5d" 1 }}', engine="go") == "    1"
     with pytest.raises(SandboxError):
-        loader.evaluate('{{ printf "%5000d" 1 }}', engine="go")
+        loader.eval('{{ printf "%5000d" 1 }}', engine="go")
 
 
 def test_liquid_replace_and_join_refuse_a_result_past_the_limit():
     pytest.importorskip("liquid")
     loader = Loader([], sandbox=TIGHT)
     with pytest.raises(SandboxError):
-        loader.evaluate(
+        loader.eval(
             '{{ "aaaaaaaaaa" | replace: "a", s }}', {"s": "x" * 500}, engine="liquid"
         )
     with pytest.raises(SandboxError):
-        loader.evaluate(
+        loader.eval(
             "{{ xs | join: s }}",
             {"xs": list(range(10)), "s": "x" * 500},
             engine="liquid",
@@ -411,19 +419,19 @@ def test_liquid_replace_and_join_refuse_a_result_past_the_limit():
 def test_shell_replacement_stops_at_the_limit():
     loader = Loader([], sandbox=TIGHT)
     data = {"v": "a" * 100}
-    assert loader.evaluate("%{V//a/bb}", data, engine="shell") == "b" * 200
+    assert loader.eval("%{V//a/bb}", data, engine="shell") == "b" * 200
     with pytest.raises(SandboxError):
-        loader.evaluate("%{V//a/" + "b" * 50 + "}", data, engine="shell")
+        loader.eval("%{V//a/" + "b" * 50 + "}", data, engine="shell")
 
 
 def test_an_evaluated_value_past_the_limit_is_refused():
     with pytest.raises(SandboxError):
-        Loader([], sandbox=TIGHT).evaluate(
+        Loader([], sandbox=TIGHT).eval(
             "{{xs}}", {"xs": list(range(5000))}, engine="mustache"
         )
 
 
-# -- is_template, and what evaluate does with a template ------------------------------
+# -- is_template, and what eval does with a template ----------------------------------
 
 PLAIN_TEXT = ["web01.lan", "cost $5 per month", "100% done", "/srv/tftp"]
 
@@ -479,16 +487,16 @@ def test_is_template_follows_a_subclass_delimiter_and_copy_has_none():
         (None, "envsubst", "${HOST}:${PORT}", "web01:80"),
     ],
 )
-def test_evaluate_keeps_one_expressions_type_and_renders_the_rest(
+def test_eval_keeps_one_expressions_type_and_renders_the_rest(
     module, engine, value, expected
 ):
     if module:
         pytest.importorskip(module)
     context = {"port": 80, "host": "web01", "xs": [3, 1]}
-    assert tplx.evaluate(value, context, engine=engine) == expected
+    assert tplx.eval(value, context, engine=engine) == expected
 
 
-def test_evaluate_returns_plain_values_as_they_are(monkeypatch):
+def test_eval_returns_plain_values_as_they_are(monkeypatch):
     compiled = []
     real = tplx.Lookup.compile
     monkeypatch.setattr(
@@ -497,14 +505,14 @@ def test_evaluate_returns_plain_values_as_they_are(monkeypatch):
         lambda self, *a, **k: compiled.append(a) or real(self, *a, **k),
     )
     for value in (80, None, ["{{ x }}"], "web01.lan", "cost $5"):
-        assert tplx.evaluate(value, engine="shell") is value
+        assert tplx.eval(value, engine="shell") is value
     assert compiled == []
 
 
-def test_evaluate_honours_the_sandbox():
+def test_eval_honours_the_sandbox():
     pytest.importorskip("jinja2")
-    assert tplx.evaluate("{{ p * 2 }}", {"p": 4}, engine="jinja", sandbox=True) == 8
+    assert tplx.eval("{{ p * 2 }}", {"p": 4}, engine="jinja", sandbox=True) == 8
     with pytest.raises(SandboxError):
-        tplx.evaluate('{{ "x" * 5000000 }}', engine="jinja", sandbox=True)
+        tplx.eval('{{ "x" * 5000000 }}', engine="jinja", sandbox=True)
     with pytest.raises(SandboxError):
-        tplx.evaluate("${p}", {"p": 1}, engine="mako", sandbox=True)
+        tplx.eval("${p}", {"p": 1}, engine="mako", sandbox=True)

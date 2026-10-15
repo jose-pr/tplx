@@ -18,7 +18,7 @@ from ._loader import (
     Lookup,
     Names,
     Source,
-    evaluate,
+    eval,
 )
 from ._registry import (
     ANY_SUFFIX,
@@ -59,7 +59,7 @@ from .exceptions import (
     UndefinedError,
 )
 
-#: The engine `evaluate` and `compile` use when given none: an engine
+#: The engine `eval` and `compile` use when given none: an engine
 #: class, name or suffix. `DollarTemplate` is the shell syntax with `$`
 #: (`${HOST}`, `${PORT:-80}`), which a sandbox runs. Set it to change the
 #: default for the whole process.
@@ -82,7 +82,7 @@ __all__ = [
     "STRING_CACHE_SIZE",
     "SandboxLimits",
     "DEFAULT_ENGINE",
-    "evaluate",
+    "eval",
     "Names",
     "Candidates",
     "EngineChoice",

@@ -47,7 +47,7 @@ class HandlebarsTemplate(Template):
     SANDBOXED = True
 
     @classmethod
-    def evaluate_expression(
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",

@@ -146,7 +146,7 @@ are not UTF-8 raise `NoEngineError`.
 class Include(NamedTuple): source: Source; engine: type; text: str | None
 ```
 
-- `Lookup.evaluate(...)`, `Lookup.compile(...)`: as on `Loader` (below),
+- `Lookup.eval(...)`, `Lookup.compile(...)`: as on `Loader` (below),
   with this lookup's search order for a string template's includes.
 - `Lookup.search_paths() -> list`: the directories searched, in order.
 - `Lookup.clear()`: forget the compiled templates and engine state.
@@ -164,23 +164,26 @@ a check that is true while it is unchanged.
 ## Evaluating and compiling string templates (`tplx`)
 
 ```python
-evaluate(template, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
-Loader.evaluate(template, context=None, /, *, engine=None, **overrides) -> Any
+eval(text, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
+Loader.eval(text, context=None, /, *, engine=None, **overrides) -> Any
 Loader.compile(source, *, engine=None, name="<string>") -> Template
 DEFAULT_ENGINE: EngineChoice = DollarTemplate
 ```
 
-- `evaluate` evaluates one **value read from a document**: a value that is
+- `eval` takes text that may be a template, typically a value read from a
+  document, and gives its result as a Python value, in one call: the engine
+  (`Template.eval`) decides whether to compile. Built in: a value that is
   not a `str`, or text in which the engine finds no syntax (`is_template`),
   comes back as it is (the same object, nothing compiled); a template that
   is exactly one expression, whitespace and whitespace-control marks around
   it allowed (`"{{ port + 1 }}"`, `"${PORT}"`, `"$port"` in Cheetah), gives
-  the expression's value with its type (`42`, not `"42"`); any other renders
-  to a string (`compile`, cached) — `"Test {{ a + b }}"` is a string. An
-  engine with no expressions (ERB, EPP) renders. Its names are the loader's
-  `globals`, then `context`, then `overrides`. `tplx.evaluate` uses a cached
-  loader that reads no file; `Loader.evaluate` brings that loader's mode,
-  sandbox, globals and `configure`.
+  the expression's value with its type (`42`, not `"42"`); any other is
+  compiled (`compile`, cached) and renders to a string — `"Test {{ a + b }}"`
+  is a string. An engine with no expressions (ERB, EPP) renders. Its names
+  are the loader's `globals`, then `context`, then `overrides`. `tplx.eval`
+  uses a cached loader that reads no file; `Loader.eval` brings that
+  loader's mode, sandbox, globals and `configure`. `from tplx import *`
+  would shadow the builtin `eval`; import the module.
 - `engine` (`EngineChoice`) is an engine class, its name or one of its
   suffixes (`"jinja"`, `".j2"`, `"go"`, `"tmpl"`); unknown raises
   `ValueError`. When omitted, `tplx.DEFAULT_ENGINE`, which a program may set;
@@ -212,7 +215,7 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   `DataView`, so no method can be called), shell, envsubst and copy. mako,
   Cheetah, ERB and EPP cannot be sandboxed.
 - A file whose suffix another engine claims raises `SandboxError` **before
-  it is read**, and so does an include of one; `evaluate` and `compile`
+  it is read**, and so does an include of one; `eval` and `compile`
   with such an engine raise it too, whatever the text.
 - An unsafe access inside a sandboxed engine (Jinja's `''.__class__`, a
   gotpl policy refusal) raises `SandboxError`.
@@ -231,7 +234,7 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   `expandtabs`, `format`, `replace`, `join`, `indent`, `wordwrap`) and
   `lipsum`; Go's `printf` widths; Liquid's `replace` and `join` (its own
   namespace limit caps assigned values); shell and envsubst replacements; and
-  every value `evaluate` returns. These checks are in-process and best-effort:
+  every value `eval` returns. These checks are in-process and best-effort:
   they bound what each step builds, not the process's memory. Output over
   `max_output` is refused for every engine, and Jinja (streamed), Liquid
   and Go stop as they reach it; Liquid and Go count loop iterations; Liquid,
@@ -454,7 +457,7 @@ class Template:
     @classmethod
     def can_process(cls, file, source) -> bool: ...
     @classmethod
-    def evaluate_expression(cls, expression, values, *, lookup=None) -> Any: ...  # optional
+    def eval(cls, text, values, *, lookup=None) -> Any: ...
     def references(self) -> frozenset[str]: ...                      # optional
     @classmethod
     def configured(cls, lookup, native) -> Any: ...
@@ -477,12 +480,18 @@ class Template:
   and envsubst the delimiter before `{` (or a name, where the bare form is
   on; a subclass's delimiter follows); copy never. `cost $5` and `100%` are
   plain for all of them.
-- `evaluate_expression` gives the value of one expression, its
-  delimiters removed (`a.b * 2` for `{{ a.b * 2 }}`): what `evaluate` calls
-  for a template that is one expression. It and `references` raise
-  `NotImplementedError` unless an engine implements them.
+- `eval(text, values, *, lookup=None)` is what `tplx.eval` asks the
+  engine, with the names already merged; the loader adds the sandbox check,
+  the `RenderError` wrapping and the size limit. The built-in one is
+  described above; an engine overrides it to treat its content its own way.
+  To keep a value's type for one expression instead, a plugin overrides
+  the private hooks it uses: `_EXPRESSION` (the delimiters) and
+  `_evaluate_expression(expression, values, *, lookup=None)`, which gets the
+  expression without its delimiters (`a.b * 2`) and raises
+  `NotImplementedError` by default, so the text renders.
+- `references` raises `NotImplementedError` unless an engine implements it.
   `configured(lookup, native)` is `configure_native` for a class, what
-  `evaluate_expression` uses without an instance.
+  `eval` uses without an instance.
 - `can_process` defaults to `can_process_suffix(cls, file)`: is `file`'s
   suffix (a path or a file name) in `template_extensions(cls)`?
 - `template_extensions(cls) -> tuple[str, ...] | None`: `EXT` normalised to

@@ -139,7 +139,7 @@ class CheetahTemplate(Template):
         return lookup.state(("cheetah", cls, mode), factory)
 
     @classmethod
-    def evaluate_expression(
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",

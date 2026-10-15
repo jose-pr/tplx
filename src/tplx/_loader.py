@@ -204,7 +204,7 @@ def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> type:
 
 
 class _NoFiles:
-    """A root with nothing in it: `tplx.evaluate`'s loader reads no file."""
+    """A root with nothing in it: `tplx.eval`'s loader reads no file."""
 
     name = stem = suffix = ""
 
@@ -378,17 +378,17 @@ class Loader:
             name, data, **overrides
         )
 
-    def evaluate(
+    def eval(
         self,
-        template: Any,
+        text: Any,
         context: "Optional[Mapping[str, Any]]" = None,
         /,
         *,
         engine: "Optional[EngineChoice]" = None,
         **overrides: Any,
     ) -> Any:
-        """`self.lookup().evaluate(template, context, engine=engine, **overrides)`."""
-        return self.lookup().evaluate(template, context, engine=engine, **overrides)
+        """`self.lookup().eval(text, context, engine=engine, **overrides)`."""
+        return self.lookup().eval(text, context, engine=engine, **overrides)
 
     def compile(
         self,
@@ -651,25 +651,23 @@ class Lookup:
             )
         return rendered
 
-    def evaluate(
+    def eval(
         self,
-        template: Any,
+        text: Any,
         context: "Optional[Mapping[str, Any]]" = None,
         /,
         *,
         engine: "Optional[EngineChoice]" = None,
         **overrides: Any,
     ) -> Any:
-        """`template` evaluated: what a value read from a document stands for.
+        """What `text`, a value read from a document, stands for: `engine`'s `eval`.
 
-        A value that is not a `str`, or text in which `engine` finds no syntax
-        (`is_template`), comes back as it is, with nothing compiled. A template
-        that is exactly one expression (`"{{ port + 1 }}"`) gives the
-        expression's value, its type kept; any other renders to a string
-        (`compile`, cached). `engine` is an engine class, its name or a suffix
-        (`"jinja"`, `".j2"`, `"go"`); by default `tplx.DEFAULT_ENGINE`, the
-        shell syntax with `$` (`DollarTemplate`). The names are the loader's
-        globals, then `context`, then `overrides`.
+        A value that is not a `str`, or text with no syntax, comes back as it
+        is; text that is one expression (`"{{ port + 1 }}"`) gives its value,
+        its type kept; any other renders to a string. `engine` is an engine
+        class, its name or a suffix (`"jinja"`, `".j2"`, `"go"`); by default
+        `tplx.DEFAULT_ENGINE`, the shell syntax with `$` (`DollarTemplate`).
+        The names are the loader's globals, then `context`, then `overrides`.
 
         :raises SandboxError: the loader is sandboxed and the engine is not,
             or a limit was passed.
@@ -679,35 +677,23 @@ class Lookup:
         choice = _engine_named(
             _default_engine() if engine is None else engine, self.loader.engines
         )
-        self._check_sandbox(choice, f"evaluate {template!r}")
-        if not isinstance(template, str) or not choice.is_template(template):
-            return template
-        expression = choice._bare_expression(template)
-        if expression is None:
-            return self._render_template(
-                self.compile(template, engine=choice), context, overrides
-            )
+        self._check_sandbox(choice, f"eval {text!r}")
         values = {**self.loader.globals, **(context or {}), **overrides}
         try:
-            result = choice.evaluate_expression(expression, values, lookup=self)
-        except NotImplementedError:
-            # An engine with no expressions renders the text instead.
-            return self._render_template(
-                self.compile(template, engine=choice), context, overrides
-            )
+            result = choice.eval(text, values, lookup=self)
         except TplxError:
             raise
         except Exception as exc:
             raise RenderError(
-                f"{choice.__name__} failed to evaluate {template!r}: {exc}"
+                f"{choice.__name__} failed to evaluate {text!r}: {exc}"
             ) from exc
         limits = self.loader.limits
-        if limits is not None:
+        if limits is not None and result is not text:
             from .engines._bounds import size
 
             if size(result) > limits.max_output:
                 raise SandboxError(
-                    f"evaluate {template!r}: a value larger than {limits.max_output}"
+                    f"eval {text!r}: a value larger than {limits.max_output}"
                 )
         return result
 
@@ -720,7 +706,7 @@ class Lookup:
     ) -> Template:
         """`source` compiled by `engine`, cached by engine and source.
 
-        `engine` follows `evaluate`'s rule. Includes resolve through this
+        `engine` follows `eval`'s rule. Includes resolve through this
         lookup. At most `STRING_CACHE_SIZE` strings stay compiled.
 
         :raises SandboxError: the loader is sandboxed and the engine is not.
@@ -768,13 +754,13 @@ class Lookup:
 
 _template.Lookup = Lookup
 
-#: `evaluate`'s loaders, by sandbox, undefined mode and registry: they read no
+#: `tplx.eval`'s loaders, by sandbox, undefined mode and registry: they read no
 #: file, and keep compiled expressions between calls.
 _EVALUATORS: "Dict[Hashable, Loader]" = {}
 
 
-def evaluate(
-    template: Any,
+def eval(
+    text: Any,
     context: "Optional[Mapping[str, Any]]" = None,
     /,
     *,
@@ -783,20 +769,19 @@ def evaluate(
     undefined: str = "strict",
     **overrides: Any,
 ) -> Any:
-    """`template` evaluated over `context`, with no loader to set up.
+    """`Loader.eval` on a loader that reads no file, with no loader to set up.
 
-    `Loader.evaluate` on a loader that reads no file. `engine` defaults to
-    `tplx.DEFAULT_ENGINE` (`DollarTemplate`); `sandbox=True` refuses every
-    engine that is not `SANDBOXED`. A data name that is `engine`, `sandbox`
-    or `undefined` goes in `context`.
+    `engine` defaults to `tplx.DEFAULT_ENGINE` (`DollarTemplate`);
+    `sandbox=True` refuses every engine that is not `SANDBOXED`. A data name
+    that is `engine`, `sandbox` or `undefined` goes in `context`.
     """
-    return _evaluator(sandbox, undefined).evaluate(
-        template, context, engine=engine, **overrides
+    return _evaluator(sandbox, undefined).eval(
+        text, context, engine=engine, **overrides
     )
 
 
 def _evaluator(sandbox: "Union[bool, SandboxLimits]", undefined: str) -> Loader:
-    """The cached loader `evaluate` uses, reading no file."""
+    """The cached loader `tplx.eval` uses, reading no file."""
     key = (sandbox, undefined, _registry.registered_engines())
     loader = _EVALUATORS.get(key)
     if loader is None:

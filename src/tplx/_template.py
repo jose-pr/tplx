@@ -153,7 +153,7 @@ class Template:
 
     @classmethod
     def configured(cls, lookup: "Optional[Lookup]", native: Any) -> Any:
-        """`configure_native` for a class: what `evaluate_expression` uses without an instance."""
+        """`configure_native` for a class: what `eval` uses without an instance."""
         if lookup is not None:
             for key, function in lookup.loader.configure.items():
                 if issubclass(cls, key):
@@ -190,21 +190,44 @@ class Template:
         raise NotImplementedError
 
     @classmethod
-    def evaluate_expression(
+    def eval(
+        cls,
+        text: Any,
+        values: "Mapping[str, Any]",
+        *,
+        lookup: "Optional[Lookup]" = None,
+    ) -> Any:
+        """What `text`, a value read from a document, stands for in this engine.
+
+        A value that is not a `str`, or text with none of this engine's syntax
+        (`is_template`), comes back as it is, compiled never. Text that is one
+        expression (`"{{ port + 1 }}"`) gives that expression's value, its type
+        kept; any other text is compiled (by `lookup`, cached) and rendered.
+        `lookup` brings the loader's undefined mode, sandbox and `configure`.
+        """
+        if not isinstance(text, str) or not cls.is_template(text):
+            return text
+        expression = cls._bare_expression(text)
+        if expression is not None:
+            try:
+                return cls._evaluate_expression(expression, values, lookup=lookup)
+            except NotImplementedError:
+                pass  # no expressions in this engine: the text renders instead
+        template = cls(text) if lookup is None else lookup.compile(text, engine=cls)
+        return template.render_values(values)
+
+    @classmethod
+    def _evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",
         *,
         lookup: "Optional[Lookup]" = None,
     ) -> Any:
-        """The value of `expression`, in this engine's own syntax, over `values`.
+        """The value of `expression`, its delimiters removed (`a.b * 2`), its type kept.
 
-        What `evaluate` gives for a template that is one expression: the
-        expression without its delimiters (`a.b * 2` for `{{ a.b * 2 }}`), its
-        value's type kept (`42`, not `"42"`). `lookup` brings the loader's
-        undefined mode, sandbox and `configure`.
-
-        :raises NotImplementedError: this engine has no expressions.
+        :raises NotImplementedError: this engine has no expressions; `eval`
+            renders the text instead.
         """
         raise NotImplementedError(f"{cls.__name__} cannot evaluate an expression")
 
