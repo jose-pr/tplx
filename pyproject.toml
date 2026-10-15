@@ -28,14 +28,15 @@ dependencies = []
 
 [project.optional-dependencies]
 # One extra per engine library; each is imported only when a file needs it.
-# 3.0 is jinja2's importable floor: 2.x calls markupsafe.soft_unicode, which
-# MarkupSafe 2.1 removed.
-jinja = ["jinja2>=3.0,<4"]
-# 1.1: 1.0.x calls time.clock, which Python 3.8 removed.
-mako = ["mako>=1.1,<2"]
-# 2.0 has the `liquid.loader.TemplateSource` and keyword `context=` loader
-# contract the include tags go through.
-liquid = ["python-liquid>=2.0,<3"]
+# 3.1.6: every earlier release has a published advisory, two of them escapes
+# from the sandbox (CVE-2024-56201, CVE-2025-27516).
+jinja = ["jinja2>=3.1.6,<4"]
+# 1.3.12: earlier releases have published advisories (CVE-2022-40023,
+# CVE-2026-44307).
+mako = ["mako>=1.3.12,<2"]
+# 2.2.1: earlier releases have published advisories, one an infinite loop on
+# a malformed template (CVE-2026-55865).
+liquid = ["python-liquid>=2.2.1,<3"]
 # 0.9.1: the series has no 0.9.0 on PyPI.
 handlebars = ["pybars3>=0.9.1,<0.10"]
 mustache = ["chevron>=0.14.0,<0.15"]
