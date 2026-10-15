@@ -174,10 +174,11 @@ DEFAULT_ENGINE: EngineChoice = DollarTemplate
   document, and gives its result as a Python value, in one call: the engine
   (`Template.eval`) decides whether to compile. Built in: a value that is
   not a `str`, or text in which the engine finds no syntax (`is_template`),
-  comes back as it is (the same object, nothing compiled); a template that
-  is exactly one expression, whitespace and whitespace-control marks around
-  it allowed (`"{{ port + 1 }}"`, `"${PORT}"`, `"$port"` in Cheetah), gives
-  the expression's value with its type (`42`, not `"42"`); any other is
+  comes back as it is (the same object, nothing compiled, the data never
+  read); a template that is exactly one expression, whitespace and
+  whitespace-control marks around it allowed (`"{{ port + 1 }}"`,
+  `"${PORT}"`, `"$port"` in Cheetah), gives the expression's value with its
+  type (`42`, not `"42"`); any other is
   compiled (`compile`, cached) and renders to a string — `"Test {{ a + b }}"`
   is a string. An engine with no expressions (ERB, EPP) renders. Its names
   are the loader's `globals`, then `context`, then `overrides`. `tplx.eval`

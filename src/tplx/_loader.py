@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import sys
-from collections import OrderedDict
+from collections import ChainMap, OrderedDict
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
@@ -635,7 +635,7 @@ class Lookup:
         overrides: "Mapping[str, Any]",
     ) -> "Union[str, bytes]":
         """`template` with the loader's globals, `data` and `overrides`, checked."""
-        values = {**self.loader.globals, **(data or {}), **overrides}
+        values = _visible(self.loader.globals, data, overrides)
         try:
             rendered = template.render_values(values)
         except TplxError:
@@ -678,7 +678,7 @@ class Lookup:
             _default_engine() if engine is None else engine, self.loader.engines
         )
         self._check_sandbox(choice, f"eval {text!r}")
-        values = {**self.loader.globals, **(context or {}), **overrides}
+        values = _visible(self.loader.globals, context, overrides)
         try:
             result = choice.eval(text, values, lookup=self)
         except TplxError:
@@ -753,6 +753,22 @@ class Lookup:
 
 
 _template.Lookup = Lookup
+
+
+def _visible(
+    globals_: "Mapping[str, Any]",
+    data: "Optional[Mapping[str, Any]]",
+    overrides: "Mapping[str, Any]",
+) -> "Mapping[str, Any]":
+    """The names a template sees: `overrides`, then `data`, then `globals_`.
+
+    `data` is passed through, never copied, so text with no syntax, or a
+    template reading two names, costs nothing that grows with the data.
+    """
+    if not globals_ and not overrides:
+        return {} if data is None else data
+    return ChainMap(dict(overrides), {} if data is None else data, globals_)
+
 
 #: `tplx.eval`'s loaders, by sandbox, undefined mode and registry: they read no
 #: file, and keep compiled expressions between calls.

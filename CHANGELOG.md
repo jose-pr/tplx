@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Loader.eval`, and the engine decides (`Template.eval`): `"{{ port + 1 }}"`
   is `81`, `"Test {{ port }}"` is `"Test 80"`, and text with no syntax comes
   back as it is, compiled never.
+- `eval` and `render` copied every name of the data before the engine looked
+  at the text, so plain text cost the size of the data (1.3 ms against
+  100,000 names). The data is passed through, and plain text never reads it.
 - The default engine was Python's `eval`, which ran code and no template;
   `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
   `tplx.PYTHON` are gone.

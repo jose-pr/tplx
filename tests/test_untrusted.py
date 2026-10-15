@@ -509,6 +509,26 @@ def test_eval_returns_plain_values_as_they_are(monkeypatch):
     assert compiled == []
 
 
+class _Untouchable(dict):
+    """Data that fails the test the moment anything copies or reads it."""
+
+    def __iter__(self):
+        raise AssertionError("the data was read")
+
+    def __getitem__(self, key):
+        raise AssertionError("the data was read")
+
+    keys = items = values = __iter__
+
+
+def test_eval_of_plain_text_never_reads_the_data():
+    data = _Untouchable(a=1)
+    for engine in ("shell", None):
+        assert tplx.eval("web01.lan", data, engine=engine) == "web01.lan"
+    with pytest.raises(RenderError, match="was read"):  # a template reads it
+        tplx.eval("${a}", data)
+
+
 def test_eval_honours_the_sandbox():
     pytest.importorskip("jinja2")
     assert tplx.eval("{{ p * 2 }}", {"p": 4}, engine="jinja", sandbox=True) == 8
