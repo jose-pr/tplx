@@ -1,0 +1,239 @@
+{
+ "about": "Rendered by Go 1.26 text/template; expected null means Go raised.",
+ "data": {
+  "Name": "web01",
+  "Port": 8080,
+  "Ratio": 0.5,
+  "On": true,
+  "Off": false,
+  "Empty": "",
+  "Tags": [
+   "a",
+   "b",
+   "c"
+  ],
+  "Map": {
+   "z": 1,
+   "a": 2,
+   "m": 3
+  },
+  "Nested": {
+   "Inner": {
+    "Value": "deep"
+   }
+  },
+  "Users": [
+   {
+    "Name": "ann",
+    "Admin": true
+   },
+   {
+    "Name": "bob",
+    "Admin": false
+   }
+  ],
+  "Nil": null,
+  "Html": "<a href='x'>&</a>",
+  "lower": "low"
+ },
+ "cases": [
+  {
+   "name": "field",
+   "source": "{{.Name}}:{{.Port}}",
+   "missingkey": "",
+   "expected": "web01:8080"
+  },
+  {
+   "name": "float",
+   "source": "{{.Ratio}} {{printf \"%.2f\" .Ratio}} {{.Port}}",
+   "missingkey": "",
+   "expected": "0.5 0.50 8080"
+  },
+  {
+   "name": "bool",
+   "source": "{{.On}} {{.Off}}",
+   "missingkey": "",
+   "expected": "true false"
+  },
+  {
+   "name": "nested",
+   "source": "{{.Nested.Inner.Value}}",
+   "missingkey": "",
+   "expected": "deep"
+  },
+  {
+   "name": "range",
+   "source": "{{range .Tags}}[{{.}}]{{end}}",
+   "missingkey": "",
+   "expected": "[a][b][c]"
+  },
+  {
+   "name": "range-index",
+   "source": "{{range $i, $t := .Tags}}{{$i}}={{$t}} {{end}}",
+   "missingkey": "",
+   "expected": "0=a 1=b 2=c "
+  },
+  {
+   "name": "range-else",
+   "source": "{{range .Empty}}x{{else}}none{{end}}",
+   "missingkey": "",
+   "expected": null
+  },
+  {
+   "name": "range-map-sorted",
+   "source": "{{range $k, $v := .Map}}{{$k}}{{$v}} {{end}}",
+   "missingkey": "",
+   "expected": "a2 m3 z1 "
+  },
+  {
+   "name": "if-else",
+   "source": "{{if .On}}yes{{else if .Off}}no{{else}}neither{{end}}",
+   "missingkey": "",
+   "expected": "yes"
+  },
+  {
+   "name": "if-empty",
+   "source": "{{if .Empty}}T{{else}}F{{end}} {{if .Tags}}T{{end}} {{if .Nil}}T{{else}}F{{end}}",
+   "missingkey": "",
+   "expected": "F T F"
+  },
+  {
+   "name": "with",
+   "source": "{{with .Nested.Inner}}{{.Value}}{{end}}{{with .Empty}}x{{else}}e{{end}}",
+   "missingkey": "",
+   "expected": "deepe"
+  },
+  {
+   "name": "trim",
+   "source": "a  {{- .Name -}}  b\n  {{- /* c */ -}}\n  c",
+   "missingkey": "",
+   "expected": "aweb01bc"
+  },
+  {
+   "name": "comment",
+   "source": "x{{/* hidden */}}y",
+   "missingkey": "",
+   "expected": "xy"
+  },
+  {
+   "name": "vars",
+   "source": "{{$x := .Name}}{{$x}} {{$x = \"re\"}}{{$x}} {{$.Port}}",
+   "missingkey": "",
+   "expected": "web01 re 8080"
+  },
+  {
+   "name": "pipeline",
+   "source": "{{.Name | printf \"%s!\" | printf \"<%s>\"}}",
+   "missingkey": "",
+   "expected": "<web01!>"
+  },
+  {
+   "name": "funcs",
+   "source": "{{len .Tags}} {{index .Tags 1}} {{index .Map \"a\"}} {{slice .Name 1 3}}",
+   "missingkey": "",
+   "expected": "3 b 2 eb"
+  },
+  {
+   "name": "logic",
+   "source": "{{and .On .Name}} {{or .Empty \"dflt\"}} {{not .On}}",
+   "missingkey": "",
+   "expected": "web01 dflt false"
+  },
+  {
+   "name": "print",
+   "source": "{{print \"a\" 1 2 \"b\"}}|{{println \"x\" 3}}|{{printf \"%5d|%-4s|%q|%v|%x\" 42 \"ab\" \"q\" .Tags 255}}",
+   "missingkey": "",
+   "expected": "a1 2b|x 3\n|   42|ab  |\"q\"|[a b c]|ff"
+  },
+  {
+   "name": "escape-funcs",
+   "source": "{{html .Html}} {{js .Html}} {{urlquery .Html}}",
+   "missingkey": "",
+   "expected": "&lt;a href=&#39;x&#39;&gt;&amp;&lt;/a&gt; \\u003Ca href\\u003D\\'x\\'\\u003E\\u0026\\u003C/a\\u003E %3Ca+href%3D%27x%27%3E%26%3C%2Fa%3E"
+  },
+  {
+   "name": "define-template",
+   "source": "{{define \"T\"}}<{{.}}>{{end}}{{template \"T\" .Name}}{{template \"T\" 3}}",
+   "missingkey": "",
+   "expected": "<web01><3>"
+  },
+  {
+   "name": "block",
+   "source": "{{block \"B\" .}}default {{.Name}}{{end}}",
+   "missingkey": "",
+   "expected": "default web01"
+  },
+  {
+   "name": "range-users",
+   "source": "{{range .Users}}{{if .Admin}}*{{end}}{{.Name}} {{end}}",
+   "missingkey": "",
+   "expected": "*ann bob "
+  },
+  {
+   "name": "missing-default",
+   "source": "[{{.Missing}}] [{{.Nested.Nope}}]",
+   "missingkey": "",
+   "expected": "[<no value>] [<no value>]"
+  },
+  {
+   "name": "missing-nil",
+   "source": "[{{.Nil}}]",
+   "missingkey": "",
+   "expected": "[<no value>]"
+  },
+  {
+   "name": "map-value",
+   "source": "{{.Map}} {{.Tags}}",
+   "missingkey": "",
+   "expected": "map[a:2 m:3 z:1] [a b c]"
+  },
+  {
+   "name": "raw-string",
+   "source": "{{`raw {{x}}`}}",
+   "missingkey": "",
+   "expected": "raw {{x}}"
+  },
+  {
+   "name": "break-continue",
+   "source": "{{range .Tags}}{{if eq . \"b\"}}{{continue}}{{end}}{{if eq . \"c\"}}{{break}}{{end}}{{.}}{{end}}",
+   "missingkey": "",
+   "expected": "a"
+  },
+  {
+   "name": "lowercase-key",
+   "source": "{{.lower}}",
+   "missingkey": "",
+   "expected": "low"
+  },
+  {
+   "name": "number-format",
+   "source": "{{1e3}} {{0x10}} {{3.0}} {{-1}} {{'a'}}",
+   "missingkey": "",
+   "expected": "1000 16 3 -1 97"
+  },
+  {
+   "name": "unicode",
+   "source": "{{printf \"%c|%U\" 'é' 'é'}}",
+   "missingkey": "",
+   "expected": "é|U+00E9"
+  },
+  {
+   "name": "html-in-text",
+   "source": "{{.Html}}",
+   "missingkey": "",
+   "expected": "<a href='x'>&</a>"
+  },
+  {
+   "name": "missingkey-zero",
+   "source": "[{{.Missing}}]",
+   "missingkey": "zero",
+   "expected": "[<no value>]"
+  },
+  {
+   "name": "missingkey-error",
+   "source": "[{{.Missing}}]",
+   "missingkey": "error",
+   "expected": null
+  }
+ ]
+}

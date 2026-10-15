@@ -94,6 +94,7 @@ def test_each_engine_is_ahead_of_the_fallback(engine, module, name, source, expe
         (LiquidTemplate, "liquid", "b.liquid", "tplx[liquid]"),
         (HandlebarsTemplate, "pybars", "b.hbs", "tplx[handlebars]"),
         (MustacheTemplate, "chevron", "b.mustache", "tplx[mustache]"),
+        (tplx.GoTemplate, "gotpl", "b.tmpl", "tplx[go]"),
     ],
 )
 def test_without_its_extra_the_error_names_it(

@@ -15,7 +15,8 @@ are private.
 no dependency. The `cli` extra (duho) adds the `tplx` command. Each other
 engine's library is an extra: `jinja` (jinja2),
 `mako`, `liquid` (python-liquid), `handlebars` (pybars3), `mustache`
-(chevron). `.erb` needs `ruby` and `.epp` needs `puppet` on `PATH`.
+(chevron), `go` (gotpl, Python 3.11 or later). `.erb` needs `ruby` and `.epp`
+needs `puppet` on `PATH`.
 
 `tplx.__version__` is the installed distribution's version.
 
@@ -207,7 +208,7 @@ rule. Names are root-relative, never relative to the including file.
   documents.
 - Any other file is rendered by its own engine with the including template's
   current data (Jinja: the whole context, loop variables included; mako: the
-  render's arguments; Liquid, Handlebars, Mustache: the render's data) and its
+  render's arguments; Liquid, Handlebars, Mustache: the render's data; Go: the pipeline's data) and its
   output is inserted as text, never parsed by the including engine. A file the
   copy engine claims is inserted as it is.
 
@@ -217,7 +218,8 @@ rule. Names are root-relative, never relative to the including file.
 | mako | `<%include file=.../>`, `<%inherit file=.../>`, `<%namespace file=.../>` |
 | Liquid | `{% include %}`, `{% render %}` |
 | Handlebars, Mustache | `{{> name}}` |
-| shell, ERB, EPP, copy | none |
+| Go | `{{template "name" .}}`, `{{block "name" .}}` |
+| shell, envsubst, ERB, EPP, copy | none |
 
 ## Engines (`tplx`, `tplx.engines`)
 
@@ -228,6 +230,7 @@ rule. Names are root-relative, never relative to the including file.
 | `LiquidTemplate` | `.liquid` | `liquid` | all three |
 | `HandlebarsTemplate` | `.hbs .handlebars` | `handlebars` | always empty |
 | `MustacheTemplate` | `.mustache` | `mustache` | always empty |
+| `GoTemplate` | `.tmpl .gotmpl` | `go` (Python 3.11+) | strict; `lenient` and `debug` write `<no value>` |
 | `ERBTemplate` | `.erb` | `ruby` (`TPLX_RUBY`) | none: Ruby `nil` |
 | `EPPTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
 | `ShellTemplate` | `.shtpl` | — | all three |
@@ -238,6 +241,15 @@ rule. Names are root-relative, never relative to the including file.
   default, writes every line ending as `\n`: a CRLF template renders LF.
 - **mako** drops a data name it reserves (`RESERVED_NAMES`: `self`,
   `context`, `next`, ...) with a warning.
+- **Go** (`text/template`, rendered by the pure-Python gotpl) reads the
+  data as it is: `.Name` is a key or an attribute. Only Go's builtin
+  functions; Sprig is one `configure` away. `{{template "name" .}}` and
+  `{{block}}` names the file does not `define` resolve through the lookup
+  when the template is compiled: a Go file joins the template set, another
+  engine's file is rendered with the pipeline's data (a mapping, else none),
+  and a name found nowhere raises `TemplateNotFound` when it runs under
+  `strict` (renders empty otherwise). An included file that changes
+  recompiles the template. `GoTemplate.DELIMITERS` is Go's `Delims`.
 - **Liquid, Handlebars, Mustache** read the data through
   `DataEncoder.view`: structures as read-only mappings, lists as lists.
 - **Every engine keeps its own defaults**; tplx does not change them. In
@@ -310,6 +322,7 @@ so filters, helpers and options reach every template and include:
 | `LiquidTemplate` | `liquid.Environment` | `env.filters["quote"] = shlex.quote` |
 | `MakoTemplate` | `mako.lookup.TemplateLookup` | `lookup.template_args["imports"] = ["from shlex import quote"]` |
 | `HandlebarsTemplate` | the `dict` of helpers every render passes | `helpers["quote"] = lambda this, v: shlex.quote(v)` |
+| `GoTemplate` | the `dict` of functions every template has | `functions.update(gotpl.funcs.sprig.text_func_map())` |
 
 Mustache, the shell engine, ERB, EPP and copy have no environment; an entry
 for them is never called. A key matches its subclasses, and several matching

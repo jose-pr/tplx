@@ -58,6 +58,13 @@ class TestShell(EngineContract):
     expected = "tplx"
 
 
+@_needs("gotpl")
+class TestGo(EngineContract):
+    engine = tplx.GoTemplate
+    source = "{{.name}}"
+    expected = "tplx"
+
+
 class TestEnvsubst(EngineContract):
     engine = tplx.EnvsubstTemplate
     source = "${NAME}"

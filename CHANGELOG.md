@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `GoTemplate` (`.tmpl`, `.gotmpl`): Go's `text/template`, rendered by the
+  pure-Python gotpl, behind the `go` extra (Python 3.11 or later).
+  `{{template}}` names resolve through the lookup; Sprig and other functions
+  come through `Loader(configure={GoTemplate: ...})`.
+
+### Changed
+
+- A `.tmpl` or `.gotmpl` file is rendered by the Go engine; 0.1.1 copied it
+  byte for byte.
+
 ## [0.1.1] - 2026-10-15
 
 ### Added

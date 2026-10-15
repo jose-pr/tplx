@@ -11,6 +11,7 @@ from __future__ import annotations
 from .._registry import register_engine
 from ._copy import CopyTemplate
 from ._external import EPPTemplate, ERBTemplate, SubprocessTemplate
+from ._go import GoTemplate
 from ._handlebars import HandlebarsTemplate
 from ._jinja import JinjaTemplate
 from ._liquid import LiquidTemplate
@@ -23,6 +24,7 @@ __all__ = [
     "EnvsubstTemplate",
     "EPPTemplate",
     "ERBTemplate",
+    "GoTemplate",
     "HandlebarsTemplate",
     "JinjaTemplate",
     "LiquidTemplate",
@@ -38,6 +40,7 @@ for _engine in (
     LiquidTemplate,
     HandlebarsTemplate,
     MustacheTemplate,
+    GoTemplate,
     ERBTemplate,
     EPPTemplate,
     ShellTemplate,
