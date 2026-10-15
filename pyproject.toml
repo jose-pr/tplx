@@ -86,4 +86,8 @@ target-version = ["py39"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # CT3 (the cheetah extra) imports cgi, deprecated on Python 3.11 and 3.12.
+    "ignore:'cgi' is deprecated:DeprecationWarning",
+]
