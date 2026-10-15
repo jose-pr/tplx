@@ -18,11 +18,12 @@ from ._jinja import JinjaTemplate
 from ._liquid import LiquidTemplate
 from ._mako import MakoTemplate
 from ._mustache import MustacheTemplate
-from ._shell import EnvsubstTemplate, ShellTemplate
+from ._shell import DollarTemplate, EnvsubstTemplate, ShellTemplate
 
 __all__ = [
     "CheetahTemplate",
     "CopyTemplate",
+    "DollarTemplate",
     "EnvsubstTemplate",
     "EPPTemplate",
     "ERBTemplate",

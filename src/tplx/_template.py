@@ -153,7 +153,7 @@ class Template:
 
     @classmethod
     def configured(cls, lookup: "Optional[Lookup]", native: Any) -> Any:
-        """`configure_native` for a class: what `evaluate` uses without an instance."""
+        """`configure_native` for a class: what `evaluate_expression` uses without an instance."""
         if lookup is not None:
             for key, function in lookup.loader.configure.items():
                 if issubclass(cls, key):
@@ -190,7 +190,7 @@ class Template:
         raise NotImplementedError
 
     @classmethod
-    def evaluate(
+    def evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",
@@ -199,8 +199,10 @@ class Template:
     ) -> Any:
         """The value of `expression`, in this engine's own syntax, over `values`.
 
-        The value keeps its type (`a.b * 2` is `42`, not `"42"`). `lookup`
-        brings the loader's undefined mode, sandbox and `configure`.
+        What `evaluate` gives for a template that is one expression: the
+        expression without its delimiters (`a.b * 2` for `{{ a.b * 2 }}`), its
+        value's type kept (`42`, not `"42"`). `lookup` brings the loader's
+        undefined mode, sandbox and `configure`.
 
         :raises NotImplementedError: this engine has no expressions.
         """

@@ -203,7 +203,7 @@ class JinjaTemplate(Template):
     does by default, writes every line ending as LF. In a sandboxed loader the
     environment is Jinja's `ImmutableSandboxedEnvironment` and the data is
     plain (`DataEncoder.wrap(plain=True)`): an unsafe attribute or call raises
-    `SandboxError`. `evaluate` is Jinja's `compile_expression`.
+    `SandboxError`. `evaluate_expression` is Jinja's `compile_expression`.
     """
 
     EXT = (".j2", ".jinja", ".jinja2")
@@ -228,7 +228,7 @@ class JinjaTemplate(Template):
         return lookup.state(("jinja", cls, mode, sandbox), factory)
 
     @classmethod
-    def evaluate(
+    def evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",

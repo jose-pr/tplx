@@ -10,7 +10,6 @@ from ._loader import (
     DEFAULT_ROOT,
     LOOKUP_CACHE_SIZE,
     SandboxLimits,
-    PYTHON,
     STRING_CACHE_SIZE,
     Candidates,
     EngineChoice,
@@ -20,7 +19,6 @@ from ._loader import (
     Names,
     Source,
     evaluate,
-    interpolate,
 )
 from ._registry import (
     ANY_SUFFIX,
@@ -37,6 +35,7 @@ from ._template import UNDEFINED_MODES, Template, can_process_suffix
 from .engines import (
     CheetahTemplate,
     CopyTemplate,
+    DollarTemplate,
     EnvsubstTemplate,
     EPPTemplate,
     ERBTemplate,
@@ -61,9 +60,10 @@ from .exceptions import (
 )
 
 #: The engine `evaluate` and `compile` use when given none: an engine
-#: class, name or suffix, or `"python"` (Python's own `eval`, refused by a
-#: sandbox). Set it to change the default for the whole process.
-DEFAULT_ENGINE: "EngineChoice" = PYTHON
+#: class, name or suffix. `DollarTemplate` is the shell syntax with `$`
+#: (`${HOST}`, `${PORT:-80}`), which a sandbox runs. Set it to change the
+#: default for the whole process.
+DEFAULT_ENGINE: "EngineChoice" = DollarTemplate
 
 try:
     __version__ = _version("tplx")
@@ -81,10 +81,8 @@ __all__ = [
     "LOOKUP_CACHE_SIZE",
     "STRING_CACHE_SIZE",
     "SandboxLimits",
-    "PYTHON",
     "DEFAULT_ENGINE",
     "evaluate",
-    "interpolate",
     "Names",
     "Candidates",
     "EngineChoice",
@@ -106,6 +104,7 @@ __all__ = [
     # shipped engines
     "CheetahTemplate",
     "CopyTemplate",
+    "DollarTemplate",
     "EnvsubstTemplate",
     "EPPTemplate",
     "ERBTemplate",

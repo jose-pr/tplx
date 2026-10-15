@@ -9,14 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `tplx.interpolate`, `Loader.interpolate` and `Lookup.interpolate`: fill
-  one value read from a document. Plain values and text with no syntax come
-  back as they are, text that is one expression gives its value with its
-  type, and any other text renders to a string.
 - `Template.is_template(text)`: does a text hold the engine's syntax, without
   compiling it; every built-in engine finds only its own.
+- `DollarTemplate`: the shell syntax with `$` (`${HOST:-localhost}`),
+  registered for no suffix; the new `tplx.DEFAULT_ENGINE`.
 
 ### Fixed
+
+- `tplx.evaluate` and `Loader.evaluate` evaluate a **template**, as a
+  template engine should, where they took a bare expression:
+  `"{{ port + 1 }}"` is `81`, `"Test {{ port }}"` is `"Test 80"`, and text
+  with no syntax comes back as it is. A bare expression (`"port + 1"`) is now
+  plain text.
+- The default engine was Python's `eval`, which ran code and no template;
+  `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
+  `tplx.PYTHON` are gone.
+- An engine's own hook is `Template.evaluate_expression`, so `evaluate`
+  means one thing; a plugin engine that defined `evaluate` renames it.
 
 - A sandboxed template or expression could make the process allocate without
   bound (`"x" * 10**10`, `[0] * 50000000`, `"x".center(n)`, a format width,

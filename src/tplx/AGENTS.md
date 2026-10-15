@@ -161,46 +161,42 @@ class Source(NamedTuple): data: bytes; name: str; origin: str; uptodate: Callabl
 A file as found: its bytes, the file name found, its path or URI as text, and
 a check that is true while it is unchanged.
 
-## Expressions and string templates (`tplx`)
+## Evaluating and compiling string templates (`tplx`)
 
 ```python
-evaluate(expression, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
-Loader.evaluate(expression, context=None, /, *, engine=None, **overrides) -> Any
+evaluate(template, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
+Loader.evaluate(template, context=None, /, *, engine=None, **overrides) -> Any
 Loader.compile(source, *, engine=None, name="<string>") -> Template
-interpolate(value, context=None, /, *, engine=None, sandbox=False, undefined="strict", **overrides) -> Any
-Loader.interpolate(value, context=None, /, *, engine=None, **overrides) -> Any
-DEFAULT_ENGINE: EngineChoice = PYTHON   # "python"
+DEFAULT_ENGINE: EngineChoice = DollarTemplate
 ```
 
-- `evaluate` gives the **value** of an expression in an engine's own syntax,
-  its type kept: `evaluate("a.b * 2", ctx, engine="jinja")` is `42`, not
-  `"42"`. Its names are the loader's `globals`, then `context`, then
-  `overrides`. `tplx.evaluate` uses a cached loader that reads no file;
-  `Loader.evaluate` brings that loader's mode, sandbox, globals and
-  `configure`.
-- `engine` (`EngineChoice`) is an engine class, its name or one of its
-  suffixes (`"jinja"`, `".j2"`, `"go"`, `"tmpl"`), or `"python"`; unknown
-  raises `ValueError`. When omitted, `tplx.DEFAULT_ENGINE`, which a program
-  may set; it starts as `"python"`: Python's own `eval` with the names as
-  globals (trusted like every engine; a sandbox raises `SandboxError` for it;
-  a missing name is `UndefinedError`).
-- Syntax per engine: Jinja an expression with filters (`xs | sort`); Liquid
-  the same (`a.b | times: 2`); Go a pipeline (`index .m "k"`); Handlebars a
-  path or helper call; Mustache a dotted name (`.` for the whole data); mako
-  a Python expression; Cheetah a Cheetah one (`$a.b * 2`); shell and envsubst
-  what goes between the braces (`HOST:-x`), giving text. ERB, EPP and copy
-  raise `NotImplementedError`.
-- `compile` compiles `source` with `engine` (a template engine; `"python"`
-  raises `ValueError`) and caches it per lookup by engine, source and name, at
-  most `STRING_CACHE_SIZE` (256). Its includes resolve through the lookup.
-- `interpolate` fills one **value read from a document**: a value that is
+- `evaluate` evaluates one **value read from a document**: a value that is
   not a `str`, or text in which the engine finds no syntax (`is_template`),
-  comes back as it is (the same object, nothing compiled); text that is
-  exactly one expression, whitespace and whitespace-control marks around it
-  allowed (`"{{ port + 1 }}"`, `"${PORT}"`, `"$port"` in Cheetah), gives the
-  expression's value with its type (`evaluate`); any other text renders to a
-  string (`compile`, cached) — `"Test {{ a + b }}"` is a string. An engine
-  with no expressions (ERB, EPP) renders. `engine` follows `compile`'s rule.
+  comes back as it is (the same object, nothing compiled); a template that
+  is exactly one expression, whitespace and whitespace-control marks around
+  it allowed (`"{{ port + 1 }}"`, `"${PORT}"`, `"$port"` in Cheetah), gives
+  the expression's value with its type (`42`, not `"42"`); any other renders
+  to a string (`compile`, cached) — `"Test {{ a + b }}"` is a string. An
+  engine with no expressions (ERB, EPP) renders. Its names are the loader's
+  `globals`, then `context`, then `overrides`. `tplx.evaluate` uses a cached
+  loader that reads no file; `Loader.evaluate` brings that loader's mode,
+  sandbox, globals and `configure`.
+- `engine` (`EngineChoice`) is an engine class, its name or one of its
+  suffixes (`"jinja"`, `".j2"`, `"go"`, `"tmpl"`); unknown raises
+  `ValueError`. When omitted, `tplx.DEFAULT_ENGINE`, which a program may set;
+  it starts as `DollarTemplate`, the shell syntax with `$` (`${HOST}`,
+  `${PORT:-80}`), which needs no extra and runs in a sandbox. Its values are
+  text, as the shell engine's are.
+- One expression per engine: Jinja an expression with filters
+  (`{{ xs | sort }}`); Liquid the same (`{{ a.b | times: 2 }}`); Go a
+  pipeline (`{{ index .m "k" }}`); Handlebars a path or helper call; Mustache
+  a dotted name (`{{a.b}}`, `{{.}}` for the whole data); mako a Python
+  expression (`${sorted(xs)}`); Cheetah a placeholder (`$a.b`, `${a.b}`);
+  shell, envsubst and `DollarTemplate` a placeholder (`${HOST:-x}`), giving
+  text.
+- `compile` compiles `source` with `engine` and caches it per lookup by
+  engine, source and name, at most `STRING_CACHE_SIZE` (256). Its includes
+  resolve through the lookup.
 - `Template.references() -> frozenset[str]`: the top-level names a template
   reads — Jinja, Liquid, Mustache, shell, envsubst; others raise
   `NotImplementedError`.
@@ -217,7 +213,7 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   Cheetah, ERB and EPP cannot be sandboxed.
 - A file whose suffix another engine claims raises `SandboxError` **before
   it is read**, and so does an include of one; `evaluate` and `compile`
-  with such an engine, or with `"python"`, raise it too.
+  with such an engine raise it too, whatever the text.
 - An unsafe access inside a sandboxed engine (Jinja's `''.__class__`, a
   gotpl policy refusal) raises `SandboxError`.
 - The data reaches a sandboxed template **plain**: `str`, numbers, `bool`,
@@ -337,6 +333,7 @@ rule. Names are root-relative, never relative to the including file.
 | `EPPTemplate` | `.epp` | `puppet` (`TPLX_PUPPET`) | none: Puppet `undef` |
 | `ShellTemplate` | `.shtpl` | — | all three |
 | `EnvsubstTemplate` | `.envsubst .template` | — | all three |
+| `DollarTemplate` | none: `DEFAULT_ENGINE` | — | all three |
 | `CopyTemplate` | any, `FALLBACK_PRIORITY` | — | n/a, returns `bytes` |
 
 - **Jinja** keeps a template's trailing newline and, as Jinja does by
@@ -400,6 +397,8 @@ rule. Names are root-relative, never relative to the including file.
   `:+`), `nested` (a default is substituted), `unquote`, `slice`, `replace`,
   `trim` (`#`, `##`, `%`, `%%`), `case` (`^`, `^^`, `,`, `,,`), `length`
   (`{#NAME}`). The shell engine has `escape default unquote slice replace`.
+  `DollarTemplate` is the same with `DELIMITER = "$"` (`${NAME}`, `$$`),
+  registered for no suffix.
 - **envsubst**: `$NAME` and `${NAME}`, from the data like the shell engine
   (names match case-insensitively; `tplx render --env` passes the
   environment). `DIALECT` (subclass to change it) is one of
@@ -455,7 +454,7 @@ class Template:
     @classmethod
     def can_process(cls, file, source) -> bool: ...
     @classmethod
-    def evaluate(cls, expression, values, *, lookup=None) -> Any: ...  # optional
+    def evaluate_expression(cls, expression, values, *, lookup=None) -> Any: ...  # optional
     def references(self) -> frozenset[str]: ...                      # optional
     @classmethod
     def configured(cls, lookup, native) -> Any: ...
@@ -478,9 +477,12 @@ class Template:
   and envsubst the delimiter before `{` (or a name, where the bare form is
   on; a subclass's delimiter follows); copy never. `cost $5` and `100%` are
   plain for all of them.
-- `evaluate` and `references` raise `NotImplementedError` unless an engine
-  implements them. `configured(lookup, native)` is `configure_native` for a
-  class, what an engine's `evaluate` uses without an instance.
+- `evaluate_expression` gives the value of one expression, its
+  delimiters removed (`a.b * 2` for `{{ a.b * 2 }}`): what `evaluate` calls
+  for a template that is one expression. It and `references` raise
+  `NotImplementedError` unless an engine implements them.
+  `configured(lookup, native)` is `configure_native` for a class, what
+  `evaluate_expression` uses without an instance.
 - `can_process` defaults to `can_process_suffix(cls, file)`: is `file`'s
   suffix (a path or a file name) in `template_extensions(cls)`?
 - `template_extensions(cls) -> tuple[str, ...] | None`: `EXT` normalised to

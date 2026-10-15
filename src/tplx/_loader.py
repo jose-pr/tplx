@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import builtins
 import os
 import pathlib
 import sys
@@ -36,7 +35,6 @@ from .exceptions import (
     SandboxError,
     TemplateNotFound,
     TplxError,
-    UndefinedError,
 )
 
 #: Where templates are looked for when a `Loader` is given no root.
@@ -73,12 +71,7 @@ _INCLUDE_DEPTH: "ContextVar[int]" = ContextVar("tplx_include_depth", default=0)
 #: How many string templates a `Lookup` keeps compiled, by engine and source.
 STRING_CACHE_SIZE = 256
 
-#: The built-in expression engine's name: Python's own `eval`. It is trusted,
-#: like every engine, and a sandbox refuses it.
-PYTHON = "python"
-
-#: An engine class, or an engine's name or suffix (`"jinja"`, `".j2"`, `"go"`),
-#: or `PYTHON`.
+#: An engine class, or an engine's name or suffix (`"jinja"`, `".j2"`, `"go"`).
 EngineChoice = Union[type, str]
 
 
@@ -177,11 +170,16 @@ def _claimed_priority(entry, engines: "Sequence[type]") -> int:
 def _default_engine() -> EngineChoice:
     """`tplx.DEFAULT_ENGINE`, read when it is needed so a caller can set it."""
     package = sys.modules.get(__package__ or "tplx")
-    return getattr(package, "DEFAULT_ENGINE", PYTHON)
+    found = getattr(package, "DEFAULT_ENGINE", None)
+    if found is None:
+        from .engines._shell import DollarTemplate
+
+        found = DollarTemplate
+    return found
 
 
-def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> EngineChoice:
-    """The engine class (or `PYTHON`) that `engine` names among `engines`.
+def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> type:
+    """The engine class that `engine` names among `engines`.
 
     :raises ValueError: no engine has that name or suffix.
     """
@@ -190,9 +188,7 @@ def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> EngineChoi
     if not isinstance(engine, str):
         raise TypeError(f"an engine is a class or a name, not {engine!r}")
     word = engine.lower().lstrip(".")
-    if word == PYTHON:
-        return PYTHON
-    known = [PYTHON]
+    known = []
     for cls in engines:
         name = cls.__name__.lower()
         if name.endswith("template") and name != "template":
@@ -205,18 +201,6 @@ def _engine_named(engine: EngineChoice, engines: "Sequence[type]") -> EngineChoi
             return cls
         known.append(name)
     raise ValueError(f"no engine is named {engine!r}; known: {', '.join(known)}")
-
-
-def _python_evaluate(expression: str, values: "Mapping[str, Any]") -> Any:
-    """`expression` through Python's `eval`, with `values` as its names."""
-    # The values are globals, not locals, so a comprehension sees them on every
-    # Python version (locals are invisible inside one before 3.12).
-    namespace: Dict[str, Any] = {str(key): value for key, value in values.items()}
-    namespace["__builtins__"] = builtins
-    try:
-        return eval(expression, namespace)  # noqa: S307 - trusted, refused by a sandbox
-    except NameError as exc:
-        raise UndefinedError(f"{expression!r}: {exc}") from exc
 
 
 class _NoFiles:
@@ -396,15 +380,15 @@ class Loader:
 
     def evaluate(
         self,
-        expression: str,
+        template: Any,
         context: "Optional[Mapping[str, Any]]" = None,
         /,
         *,
         engine: "Optional[EngineChoice]" = None,
         **overrides: Any,
     ) -> Any:
-        """`self.lookup().evaluate(expression, context, engine=engine, **overrides)`."""
-        return self.lookup().evaluate(expression, context, engine=engine, **overrides)
+        """`self.lookup().evaluate(template, context, engine=engine, **overrides)`."""
+        return self.lookup().evaluate(template, context, engine=engine, **overrides)
 
     def compile(
         self,
@@ -415,18 +399,6 @@ class Loader:
     ) -> Template:
         """`self.lookup().compile(source, engine=engine, name=name)`."""
         return self.lookup().compile(source, engine=engine, name=name)
-
-    def interpolate(
-        self,
-        value: Any,
-        context: "Optional[Mapping[str, Any]]" = None,
-        /,
-        *,
-        engine: "Optional[EngineChoice]" = None,
-        **overrides: Any,
-    ) -> Any:
-        """`self.lookup().interpolate(value, context, engine=engine, **overrides)`."""
-        return self.lookup().interpolate(value, context, engine=engine, **overrides)
 
 
 class Lookup:
@@ -679,96 +651,55 @@ class Lookup:
             )
         return rendered
 
-    def interpolate(
+    def evaluate(
         self,
-        value: Any,
+        template: Any,
         context: "Optional[Mapping[str, Any]]" = None,
         /,
         *,
         engine: "Optional[EngineChoice]" = None,
         **overrides: Any,
     ) -> Any:
-        """`value` with its template filled in, for a value read from a document.
+        """`template` evaluated: what a value read from a document stands for.
 
         A value that is not a `str`, or text in which `engine` finds no syntax
-        (`is_template`), comes back as it is, with nothing compiled. Text that
-        is exactly one expression (`"{{ port + 1 }}"`) gives the expression's
-        value, its type kept (`evaluate`); any other text renders to a string
-        (`compile`, cached). `engine` follows `compile`'s rule.
+        (`is_template`), comes back as it is, with nothing compiled. A template
+        that is exactly one expression (`"{{ port + 1 }}"`) gives the
+        expression's value, its type kept; any other renders to a string
+        (`compile`, cached). `engine` is an engine class, its name or a suffix
+        (`"jinja"`, `".j2"`, `"go"`); by default `tplx.DEFAULT_ENGINE`, the
+        shell syntax with `$` (`DollarTemplate`). The names are the loader's
+        globals, then `context`, then `overrides`.
 
         :raises SandboxError: the loader is sandboxed and the engine is not,
             or a limit was passed.
-        """
-        if not isinstance(value, str):
-            return value
-        choice = _engine_named(
-            _default_engine() if engine is None else engine, self.loader.engines
-        )
-        if not isinstance(choice, type):
-            raise ValueError(
-                'interpolate needs a template engine: pass engine= ("python" '
-                "only evaluates expressions)"
-            )
-        if not choice.is_template(value):
-            return value
-        expression = choice._bare_expression(value)
-        if expression is not None:
-            try:
-                return self.evaluate(expression, context, engine=choice, **overrides)
-            except NotImplementedError:
-                pass  # an engine with no expressions renders the text instead
-        return self._render_template(
-            self.compile(value, engine=choice), context, overrides
-        )
-
-    def evaluate(
-        self,
-        expression: str,
-        context: "Optional[Mapping[str, Any]]" = None,
-        /,
-        *,
-        engine: "Optional[EngineChoice]" = None,
-        **overrides: Any,
-    ) -> Any:
-        """The value of `expression` in `engine`'s syntax, its type kept.
-
-        `engine` is an engine class, its name or a suffix (`"jinja"`, `".j2"`,
-        `"go"`), or `"python"`; by default `tplx.DEFAULT_ENGINE` (`"python"`,
-        Python's own `eval`, which a sandbox refuses). The names are the
-        loader's globals, then `context`, then `overrides`.
-
-        :raises SandboxError: the loader is sandboxed and the engine is not.
         :raises UndefinedError: a missing name, under `strict`.
-        :raises RenderError: the engine failed; `NotImplementedError` when it
-            has no expressions.
+        :raises RenderError: the engine failed.
         """
         choice = _engine_named(
             _default_engine() if engine is None else engine, self.loader.engines
         )
+        self._check_sandbox(choice, f"evaluate {template!r}")
+        if not isinstance(template, str) or not choice.is_template(template):
+            return template
+        expression = choice._bare_expression(template)
+        if expression is None:
+            return self._render_template(
+                self.compile(template, engine=choice), context, overrides
+            )
         values = {**self.loader.globals, **(context or {}), **overrides}
-        if choice == PYTHON:
-            if self.loader.sandbox:
-                raise SandboxError(
-                    "Python expressions cannot run in a sandbox; pass engine= one "
-                    "that can (jinja, liquid, go, ...)"
-                )
-            try:
-                return _python_evaluate(expression, values)
-            except TplxError:
-                raise
-            except Exception as exc:
-                raise RenderError(
-                    f"python failed to evaluate {expression!r}: {exc}"
-                ) from exc
-        assert isinstance(choice, type)
-        self._check_sandbox(choice, f"evaluate {expression!r}")
         try:
-            result = choice.evaluate(expression, values, lookup=self)
-        except (TplxError, NotImplementedError):
+            result = choice.evaluate_expression(expression, values, lookup=self)
+        except NotImplementedError:
+            # An engine with no expressions renders the text instead.
+            return self._render_template(
+                self.compile(template, engine=choice), context, overrides
+            )
+        except TplxError:
             raise
         except Exception as exc:
             raise RenderError(
-                f"{choice.__name__} failed to evaluate {expression!r}: {exc}"
+                f"{choice.__name__} failed to evaluate {template!r}: {exc}"
             ) from exc
         limits = self.loader.limits
         if limits is not None:
@@ -776,7 +707,7 @@ class Lookup:
 
             if size(result) > limits.max_output:
                 raise SandboxError(
-                    f"evaluate {expression!r}: a value larger than {limits.max_output}"
+                    f"evaluate {template!r}: a value larger than {limits.max_output}"
                 )
         return result
 
@@ -789,9 +720,8 @@ class Lookup:
     ) -> Template:
         """`source` compiled by `engine`, cached by engine and source.
 
-        `engine` follows `evaluate`'s rule but must be a template engine (not
-        `"python"`). Includes resolve through this lookup. At most
-        `STRING_CACHE_SIZE` strings stay compiled.
+        `engine` follows `evaluate`'s rule. Includes resolve through this
+        lookup. At most `STRING_CACHE_SIZE` strings stay compiled.
 
         :raises SandboxError: the loader is sandboxed and the engine is not.
         :raises RenderError: the engine could not compile it.
@@ -799,11 +729,6 @@ class Lookup:
         choice = _engine_named(
             _default_engine() if engine is None else engine, self.loader.engines
         )
-        if not isinstance(choice, type):
-            raise ValueError(
-                'compile needs a template engine: pass engine= ("python" '
-                "only evaluates expressions)"
-            )
         self._check_sandbox(choice, name)
         key = (choice, source, name)
         cached = self._strings.get(key)
@@ -849,7 +774,7 @@ _EVALUATORS: "Dict[Hashable, Loader]" = {}
 
 
 def evaluate(
-    expression: str,
+    template: Any,
     context: "Optional[Mapping[str, Any]]" = None,
     /,
     *,
@@ -858,36 +783,20 @@ def evaluate(
     undefined: str = "strict",
     **overrides: Any,
 ) -> Any:
-    """The value of `expression` over `context`, with no loader to set up.
+    """`template` evaluated over `context`, with no loader to set up.
 
     `Loader.evaluate` on a loader that reads no file. `engine` defaults to
-    `tplx.DEFAULT_ENGINE` (`"python"`); `sandbox=True` refuses `"python"` and
-    every engine that is not `SANDBOXED`. A data name that is `engine`,
-    `sandbox` or `undefined` goes in `context`.
+    `tplx.DEFAULT_ENGINE` (`DollarTemplate`); `sandbox=True` refuses every
+    engine that is not `SANDBOXED`. A data name that is `engine`, `sandbox`
+    or `undefined` goes in `context`.
     """
     return _evaluator(sandbox, undefined).evaluate(
-        expression, context, engine=engine, **overrides
-    )
-
-
-def interpolate(
-    value: Any,
-    context: "Optional[Mapping[str, Any]]" = None,
-    /,
-    *,
-    engine: "Optional[EngineChoice]" = None,
-    sandbox: "Union[bool, SandboxLimits]" = False,
-    undefined: str = "strict",
-    **overrides: Any,
-) -> Any:
-    """`Loader.interpolate` on a loader that reads no file (see `evaluate`)."""
-    return _evaluator(sandbox, undefined).interpolate(
-        value, context, engine=engine, **overrides
+        template, context, engine=engine, **overrides
     )
 
 
 def _evaluator(sandbox: "Union[bool, SandboxLimits]", undefined: str) -> Loader:
-    """The cached loader `evaluate` and `interpolate` use, reading no file."""
+    """The cached loader `evaluate` uses, reading no file."""
     key = (sandbox, undefined, _registry.registered_engines())
     loader = _EVALUATORS.get(key)
     if loader is None:

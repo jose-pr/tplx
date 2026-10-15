@@ -222,7 +222,7 @@ class ShellTemplate(Template):
     Configured by subclassing:
 
     ```python
-    class DollarTemplate(ShellTemplate):
+    class CfgTemplate(ShellTemplate):
         EXT = (".tpl", ".cfg")
         DELIMITER = "$"
         PATTERN = "all"         # ${NAME} and $NAME
@@ -315,7 +315,7 @@ class ShellTemplate(Template):
         return compiled
 
     @classmethod
-    def evaluate(
+    def evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",
@@ -521,6 +521,18 @@ class ShellTemplate(Template):
             return None
         except _Keep:
             return whole
+
+
+class DollarTemplate(ShellTemplate):
+    """The shell syntax with `$`: `${HOST}`, `${PORT:-80}`, `${PATH//:/ }`, `$$`.
+
+    `tplx.DEFAULT_ENGINE`, for `evaluate` and `compile` given no engine. Only
+    the braced form, so `cost $5` and `$HOME` are text. Not registered: no
+    file suffix picks it (`.shtpl` is `%`, `.envsubst` is `EnvsubstTemplate`).
+    """
+
+    EXT: ClassVar[Union[None, str, Tuple[str, ...]]] = ()
+    DELIMITER: ClassVar[str] = "$"
 
 
 class EnvsubstTemplate(ShellTemplate):

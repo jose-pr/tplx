@@ -138,7 +138,7 @@ class MakoTemplate(Template):
         return lookup.state(("mako", cls, strict), factory)
 
     @classmethod
-    def evaluate(
+    def evaluate_expression(
         cls,
         expression: str,
         values: "Mapping[str, Any]",
