@@ -9,6 +9,7 @@ from ._encoder import DataEncoder, DataView
 from ._loader import (
     DEFAULT_ROOT,
     LOOKUP_CACHE_SIZE,
+    SandboxLimits,
     PYTHON,
     STRING_CACHE_SIZE,
     Candidates,
@@ -78,6 +79,7 @@ __all__ = [
     "DEFAULT_ROOT",
     "LOOKUP_CACHE_SIZE",
     "STRING_CACHE_SIZE",
+    "SandboxLimits",
     "PYTHON",
     "DEFAULT_ENGINE",
     "evaluate",

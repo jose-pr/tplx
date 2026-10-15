@@ -24,8 +24,13 @@ EXPRESSION_CACHE_SIZE = 256
 
 
 def capture(value: Any, *rest: Any, **keywords: Any) -> str:
-    """Record `value` for the evaluation in progress; write nothing."""
-    _CAPTURED.get().append(value)
+    """Record `value` for the evaluation in progress; write nothing.
+
+    Outside an evaluation (a template naming the hook itself) it does nothing.
+    """
+    box = _CAPTURED.get(None)
+    if box is not None:
+        box.append(value)
     return ""
 
 

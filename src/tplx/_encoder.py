@@ -9,9 +9,11 @@ changes how, the way a `json.JSONEncoder` subclass does.
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import os
+import types
 from collections.abc import Mapping
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 from typing import Any, ClassVar, Dict, Iterable, Iterator, List, Sequence, Tuple
@@ -88,6 +90,22 @@ class DataView(Mapping):
 #: What `DataEncoder._json` returns for a reference back to an object on the
 #: path; the item that holds it is dropped.
 _SKIP = object()
+
+
+def _is_function(value: Any) -> bool:
+    """A function the caller handed over: not a class (calling one builds an
+    object whose methods a template could then reach) and not a callable object."""
+    return isinstance(
+        value,
+        (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            types.MethodType,
+            types.MethodDescriptorType,
+            types.WrapperDescriptorType,
+            functools.partial,
+        ),
+    )
 
 
 def unwrap(value: Any) -> Any:
@@ -201,8 +219,9 @@ class DataEncoder:
         """`value` for a data template: a view for a structure, a value as it is.
 
         `plain` (a sandbox's): a value that is not in `PLAIN` reaches the template
-        as its text, so none of its methods do; a callable the caller put in
-        the data stays callable, but an object's methods are hidden.
+        as its text, so none of its methods do; a function the caller put in
+        the data stays callable (a callable object does not), but an
+        object's methods are hidden.
         """
         found = self.structure(value)
         if isinstance(found, DataView):
@@ -213,7 +232,7 @@ class DataEncoder:
             return DataView(found, self, plain)
         if isinstance(found, list):
             return [self.wrap(item, plain=plain) for item in found]
-        if plain and not isinstance(found, self.PLAIN) and not callable(found):
+        if plain and not isinstance(found, self.PLAIN) and not _is_function(found):
             return str(found)
         return found
 

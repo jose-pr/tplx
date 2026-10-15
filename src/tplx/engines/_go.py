@@ -90,8 +90,17 @@ class GoTemplate(Template):
         gotpl = _gotpl()
         mode = lookup.loader.undefined if lookup is not None else "strict"
         sandbox = None
-        if lookup is not None and lookup.loader.sandbox:
-            sandbox = gotpl.SandboxPolicy(allow_functions=functions)
+        limits = lookup.loader.limits if lookup is not None else None
+        if limits is not None:
+            sandbox = gotpl.SandboxPolicy(
+                allow_functions=functions,
+                default_budget=gotpl.ExecutionBudget(
+                    max_output_chars=limits.max_output,
+                    max_iterations=limits.max_iterations,
+                    max_template_depth=limits.max_depth,
+                    max_function_calls=limits.max_iterations,
+                ),
+            )
         return gotpl.Environment(
             functions=functions,
             delimiters=cls.DELIMITERS,
@@ -232,7 +241,7 @@ def _translate(gotpl: Any, exc: Exception, where: str) -> None:
     cause = exc.__cause__
     if isinstance(cause, TplxError):
         raise cause from None
-    if isinstance(exc, gotpl.SandboxViolationError):
+    if isinstance(exc, (gotpl.SandboxViolationError, gotpl.BudgetExceededError)):
         raise SandboxError(f"{where}: {exc}") from exc
     if "missing key" in str(exc):
         raise UndefinedError(f"{where}: {exc}") from exc

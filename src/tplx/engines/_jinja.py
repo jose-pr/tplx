@@ -180,7 +180,19 @@ class JinjaTemplate(Template):
     def render_values(self, values: "Mapping[str, Any]") -> str:
         jinja2 = self._jinja2
         try:
-            return self._template.render(type(self)._data(self.lookup, values))
+            data = type(self)._data(self.lookup, values)
+            limits = self.lookup.loader.limits if self.lookup is not None else None
+            if limits is None:
+                return self._template.render(data)
+            parts, size = [], 0
+            for part in self._template.generate(data):
+                size += len(part)
+                if size > limits.max_output:
+                    raise SandboxError(
+                        f"{self.origin}: output longer than {limits.max_output}"
+                    )
+                parts.append(part)
+            return "".join(parts)
         except jinja2.UndefinedError as exc:
             raise UndefinedError(f"{self.origin}: {exc}") from exc
         except jinja2.exceptions.SecurityError as exc:

@@ -236,3 +236,67 @@ def test_in_a_sandbox_a_rich_value_is_its_text_and_a_given_function_still_works(
     loader = Loader([tree.root], sandbox=True, globals={"shout": str.upper})
     rendered = loader.render("p", where=pathlib.PurePosixPath("/srv/tftp"))
     assert rendered == "/srv/tftp|False|A"
+
+
+# -- what a sandboxed render may cost ------------------------------------------------
+
+from tplx import SandboxLimits  # noqa: E402
+
+SMALL = SandboxLimits(max_output=1000, max_iterations=10, max_depth=5)
+
+
+def test_sandbox_true_means_the_default_limits():
+    assert Loader([], sandbox=True).limits == SandboxLimits()
+    assert Loader([]).limits is None and Loader([], sandbox=SMALL).sandbox
+
+
+@pytest.mark.parametrize(
+    "module, name, source",
+    [
+        ("jinja2", "p.j2", "{% for i in range(5000) %}0123456789{% endfor %}"),
+        ("liquid", "p.liquid", "{% for i in (1..5000) %}0123456789{% endfor %}"),
+        ("gotpl", "p.tmpl", "{{range .many}}0123456789{{end}}"),
+        ("chevron", "p.mustache", "{{#many}}0123456789{{/many}}"),
+        (None, "p.shtpl", "%{BIG}"),
+    ],
+)
+def test_a_render_over_its_limits_raises(tree, module, name, source):
+    if module:
+        pytest.importorskip(module)
+    tree.write(name, source)
+    data = {"many": list(range(5000)), "big": "x" * 5000}
+    assert Loader([tree.root], sandbox=True).render(name, data)  # within defaults
+    with pytest.raises(SandboxError):
+        Loader([tree.root], sandbox=SMALL).render(name, data)
+
+
+def test_an_include_cycle_across_engines_stops_at_max_depth(tree):
+    pytest.importorskip("jinja2")
+    pytest.importorskip("liquid")
+    tree.write("a.j2", '{% include "b" %}')
+    tree.write("b.liquid", "{% include 'a' %}")
+    with pytest.raises(SandboxError, match="deeper than 5"):
+        Loader([tree.root], sandbox=SMALL).render("a")
+
+
+def test_in_a_sandbox_a_class_or_a_callable_object_cannot_be_called(tree):
+    pytest.importorskip("jinja2")
+
+    class Callable:
+        def __call__(self):
+            return "called"
+
+        def __str__(self):
+            return "callable-object"
+
+    tree.write("p.j2", "{{ cls is callable }}|{{ obj is callable }}|{{ obj }}")
+    rendered = Loader([tree.root], sandbox=True).render(
+        "p", cls=pathlib.PurePosixPath, obj=Callable()
+    )
+    assert rendered == "False|False|callable-object"
+
+
+def test_the_capture_hook_is_inert_outside_an_evaluation(tree):
+    pytest.importorskip("liquid")
+    tree.write("p.liquid", "[{{ 'x' | tplx_capture }}]")
+    assert Loader([tree.root], sandbox=True).render("p") == "[]"

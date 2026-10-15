@@ -7,6 +7,8 @@ import os
 import pathlib
 import sys
 from collections import OrderedDict
+from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import (
     Any,
@@ -48,6 +50,25 @@ Names = Union[str, Sequence[str]]
 
 #: How many `Lookup`s a `Loader` keeps for reuse; the least recently used goes.
 LOOKUP_CACHE_SIZE = 64
+
+
+@dataclass(frozen=True)
+class SandboxLimits:
+    """What one sandboxed render may cost; going over raises `SandboxError`.
+
+    `max_output`: characters (or bytes) a render may produce. `max_iterations`:
+    loop iterations, where the engine counts them. `max_depth`: nested
+    templates and includes. Wall time is not bounded here: a runaway render is
+    stopped from outside (a worker process, a timeout).
+    """
+
+    max_output: int = 1_000_000
+    max_iterations: int = 100_000
+    max_depth: int = 100
+
+
+#: How deep the includes of the render in progress go (another engine's file).
+_INCLUDE_DEPTH: "ContextVar[int]" = ContextVar("tplx_include_depth", default=0)
 
 #: How many string templates a `Lookup` keeps compiled, by engine and source.
 STRING_CACHE_SIZE = 256
@@ -273,7 +294,8 @@ class Loader:
     its subclasses: `{JinjaTemplate: lambda env: env.filters.update(q=quote)}`.
     `sandbox=True` renders untrusted templates: only engines whose class sets
     `SANDBOXED` take part, and a file another engine claims raises
-    `SandboxError` before it is read.
+    `SandboxError` before it is read; `sandbox=SandboxLimits(...)` also sets
+    what a render may cost (the defaults otherwise).
     """
 
     def __init__(
@@ -285,7 +307,7 @@ class Loader:
         globals: "Optional[Mapping[str, Any]]" = None,
         encoder: "Optional[DataEncoder]" = None,
         configure: "Optional[Mapping[type, Callable[[Any], Any]]]" = None,
-        sandbox: bool = False,
+        sandbox: "Union[bool, SandboxLimits]" = False,
     ) -> None:
         if undefined not in UNDEFINED_MODES:
             raise ValueError(
@@ -306,7 +328,13 @@ class Loader:
                     "configure maps an engine class to a callable, "
                     f"not {cls!r} to {function!r}"
                 )
-        self.sandbox = bool(sandbox)
+        #: The limits of a sandboxed render; None when not sandboxed.
+        self.limits: "Optional[SandboxLimits]" = (
+            sandbox
+            if isinstance(sandbox, SandboxLimits)
+            else (SandboxLimits() if sandbox else None)
+        )
+        self.sandbox = self.limits is not None
         self._lookups: "OrderedDict[Hashable, Lookup]" = OrderedDict()
 
     def lookup(
@@ -579,7 +607,17 @@ class Lookup:
 
         :raises NoEngineError: the result is bytes that are not UTF-8.
         """
-        rendered = self.render(name, {str(k): unwrap(v) for k, v in values.items()})
+        depth = _INCLUDE_DEPTH.get() + 1
+        limits = self.loader.limits
+        if limits is not None and depth > limits.max_depth:
+            raise SandboxError(
+                f"{name!r}: includes nest deeper than {limits.max_depth}"
+            )
+        token = _INCLUDE_DEPTH.set(depth)
+        try:
+            rendered = self.render(name, {str(k): unwrap(v) for k, v in values.items()})
+        finally:
+            _INCLUDE_DEPTH.reset(token)
         if isinstance(rendered, bytes):
             try:
                 return rendered.decode("utf-8")
@@ -607,13 +645,19 @@ class Lookup:
         template = self.get(name)
         values = {**self.loader.globals, **(data or {}), **overrides}
         try:
-            return template.render_values(values)
+            rendered = template.render_values(values)
         except TplxError:
             raise
         except Exception as exc:
             raise RenderError(
                 f"{type(template).__name__} failed to render {template.origin}: {exc}"
             ) from exc
+        limits = self.loader.limits
+        if limits is not None and len(rendered) > limits.max_output:
+            raise SandboxError(
+                f"{template.origin}: output longer than {limits.max_output}"
+            )
+        return rendered
 
     def evaluate(
         self,

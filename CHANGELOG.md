@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `SandboxLimits(max_output, max_iterations, max_depth)`: what one sandboxed
+  render may cost, `Loader(sandbox=SandboxLimits(...))`; `sandbox=True` uses
+  the defaults (1,000,000 characters, 100,000 iterations, depth 100). Going
+  over raises `SandboxError`.
+
+### Changed
+
+- In a sandbox only a function the caller passes stays callable; a class or a
+  callable object reaches the template as data it cannot call.
+- The `jinja`, `liquid` and `mako` extras require jinja2 3.1.6, python-liquid
+  2.2.1 and mako 1.3.12: every earlier release has a published security
+  advisory (two Jinja sandbox escapes among them).
+
 ## [0.1.4] - 2026-10-15
 
 ### Added

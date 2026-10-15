@@ -29,7 +29,7 @@ a drive) is refused. For untrusted templates, opt in to the sandbox
 ## Loading and rendering (`tplx`)
 
 ```python
-Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None, configure=None, sandbox=False)
+Loader(roots=(), *, engines=None, undefined="strict", globals=None, encoder=None, configure=None, sandbox=False | True | SandboxLimits)
 ```
 
 Finds templates under `roots` and renders them with the engine each needs.
@@ -52,9 +52,11 @@ order) and `Candidates = Callable[[str], Iterable[str]]`.
   that engine's own environment when a lookup builds it, for the class and its
   subclasses (see "Configuring an engine"). Anything but a class mapped to a
   callable raises `TypeError`.
-- `sandbox`: render untrusted templates (see "Untrusted templates").
+- `sandbox`: render untrusted templates (see "Untrusted templates"); `True`
+  with the default `SandboxLimits`, or a `SandboxLimits`.
 - Attributes: `roots`, `engines` (tuple), `undefined`, `globals` (dict),
-  `encoder`, `configure` (dict), `sandbox`.
+  `encoder`, `configure` (dict), `sandbox` (bool), `limits`
+  (`SandboxLimits | None`).
 
 **Resolution**: a name may hold directories (`debian/boot`), separated by
 `/`. A name with a `..` segment, a backslash, a NUL or a drive (`C:/x`,
@@ -212,11 +214,19 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   `None` and `bytes` as they are (`DataEncoder.PLAIN`), mappings and objects
   as read-only views with their methods hidden, lists as lists, any other
   value (a path, an address) as its text. A function the caller puts in the
-  data or `globals` stays callable.
-- The sandbox limits what a template can **reach**, not what it **costs**: a
-  template can still loop or write a lot (Jinja's sandbox caps `range()` at
-  100,000 items). Bound time and memory around the render (a worker process,
-  a timeout) when that matters.
+  data or `globals` stays callable; a class or a callable object does not
+  (calling a class would build an object whose methods a template could reach).
+- **Cost**: `SandboxLimits(max_output=1_000_000, max_iterations=100_000,
+  max_depth=100)` bounds one render; going over raises `SandboxError`. Output
+  over `max_output` is refused for every engine, and Jinja (streamed), Liquid
+  and Go stop as they reach it; Liquid and Go count loop iterations; Liquid,
+  Go and includes of another engine's file count depth (Jinja's own includes
+  end at Python's recursion limit, a `RenderError`). Jinja's sandbox caps
+  `range()` at 100,000. **Wall time is not bounded**: stop a runaway render
+  from outside (a worker process, a timeout).
+- The engine libraries' own sandboxes do the containing; the `jinja`,
+  `liquid` and `mako` extras require releases with no published advisory
+  (jinja2 3.1.6, python-liquid 2.2.1, mako 1.3.12).
 - A third-party engine opts in by setting `SANDBOXED = True` — a promise that
   its templates cannot reach beyond the data given.
 

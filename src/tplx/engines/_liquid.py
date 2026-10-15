@@ -9,7 +9,12 @@ from typing import Any, FrozenSet, Mapping, Optional
 
 from .._loader import Lookup
 from .._template import Template
-from ..exceptions import EngineUnavailableError, TemplateNotFound, UndefinedError
+from ..exceptions import (
+    EngineUnavailableError,
+    SandboxError,
+    TemplateNotFound,
+    UndefinedError,
+)
 from ._capture import CAPTURE_NAME, cached, capture, captured, capturing
 
 
@@ -70,6 +75,12 @@ def _environment(liquid, TemplateSource, lookup, engine: type, mode: str):
     }[mode]
     environment = liquid.Environment(loader=_LookupLoader(), undefined=undefined)
     environment.filters[CAPTURE_NAME] = capture
+    limits = lookup.loader.limits if lookup is not None else None
+    if limits is not None:
+        environment.output_stream_limit = limits.max_output
+        environment.loop_iteration_limit = limits.max_iterations
+        environment.context_depth_limit = limits.max_depth
+        environment.local_namespace_limit = limits.max_output
     return environment
 
 
@@ -131,6 +142,8 @@ class LiquidTemplate(Template):
                 template.render(**data)
             except liquid.exceptions.UndefinedError as exc:
                 raise UndefinedError(f"{expression!r}: {exc}") from exc
+            except liquid.exceptions.ResourceLimitError as exc:
+                raise SandboxError(f"{expression!r}: {exc}") from exc
         # An undefined name reaches the filter as Liquid's Undefined; type() so
         # a StrictUndefined is not touched.
         if box and issubclass(type(box[0]), liquid.Undefined):
@@ -162,6 +175,8 @@ class LiquidTemplate(Template):
             )
         except self._liquid.exceptions.UndefinedError as exc:
             raise UndefinedError(f"{self.origin}: {exc}") from exc
+        except self._liquid.exceptions.ResourceLimitError as exc:
+            raise SandboxError(f"{self.origin}: {exc}") from exc
         except self._liquid.exceptions.TemplateNotFoundError as exc:
             if isinstance(exc.__cause__, TemplateNotFound):
                 raise exc.__cause__ from None
