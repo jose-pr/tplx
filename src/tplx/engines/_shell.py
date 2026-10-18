@@ -4,8 +4,20 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
+from .._encoder import DataEncoder
 from .._loader import Lookup
 
 from .._template import Template
@@ -326,25 +338,84 @@ class ShellTemplate(Template):
 
         :raises ValueError: an expression this syntax does not know.
         """
-        template = cls("", lookup=lookup)
         whole = f"{cls.DELIMITER}{{{expression}}}"
-        found = template._braced(expression, whole, template.variables(values))
+        template = cls(whole, lookup=lookup)
+        found = template._braced(expression, whole, template._variables_read(values))
         if found is None:
             raise ValueError(f"{cls.__name__} does not know {whole!r}")
         return found
 
     def references(self) -> FrozenSet[str]:
         """The placeholder names this template reads, as written."""
-        names = set()
-        for match in self.pattern().finditer(self.source):
-            name = match.group("braced") or match.groupdict().get("named")
-            if name:
-                names.add(name)
+        names: Set[str] = set()
+        self._collect(self.source, names)
         return frozenset(names)
+
+    def _collect(self, text: str, names: Set[str]) -> None:
+        """Add the names `text`'s placeholders read, scanning as `expand` does."""
+        pattern, features = self.syntax()
+        delimiter = str(self.DELIMITER)
+        braced = pattern in ("braced", "all")
+        unbraced = pattern in ("unbraced", "all")
+        position = 0
+        while True:
+            start = text.find(delimiter, position)
+            if start < 0:
+                return
+            after = start + len(delimiter)
+            if "escape" in features and text.startswith(delimiter, after):
+                position = after + len(delimiter)
+                continue
+            if braced and text.startswith("{", after):
+                close = self._closing(text, after + 1, delimiter)
+                if close is not None:
+                    inner = text[after + 1 : close]
+                    length = "length" in features and inner.startswith("#")
+                    name = _NAME.match(inner, 1 if length else 0)
+                    if name is not None:
+                        names.add(name.group())
+                        self._collect(inner[name.end() :], names)
+                        position = close + 1
+                        continue
+            if unbraced:
+                name = _NAME.match(text, after)
+                if name is not None:
+                    names.add(name.group())
+                    position = name.end()
+                    continue
+            position = after
 
     def variables(self, values: "Mapping[str, Any]") -> Dict[str, str]:
         """`values` as the placeholders read them: the encoder's `flatten`, by UPPER name."""
         return {key.upper(): text for key, text in self.encoder.flatten(values).items()}
+
+    def _variables_read(self, values: "Mapping[str, Any]") -> Dict[str, str]:
+        """`variables(values)` for the names this template reads.
+
+        With the default `key` (`_`-joined, upper-cased) a name can only come
+        from a top-level name that is it or one of its `_`-prefixes, so only
+        those are flattened; the rest of the data is never converted.
+        """
+        encoder = self.encoder
+        if (
+            type(self).variables is not ShellTemplate.variables
+            or type(encoder).key is not DataEncoder.key
+            or type(encoder).flatten is not DataEncoder.flatten
+        ):
+            return self.variables(values)
+        prefixes = self.__dict__.get("_prefixes")
+        if prefixes is None:
+            # Every word of the text, a superset of the names it reads: a name
+            # missed here would render as undefined.
+            prefixes = set()
+            for name in _NAME.findall(self.source):
+                parts = name.upper().split("_")
+                prefixes.update(
+                    "_".join(parts[:end]) for end in range(1, len(parts) + 1)
+                )
+            self._prefixes = prefixes
+        read = {key: values[key] for key in values if str(key).upper() in prefixes}
+        return self.variables(read)
 
     @staticmethod
     def _unquote(default: str) -> str:
@@ -354,7 +425,7 @@ class ShellTemplate(Template):
         return default
 
     def render_values(self, values: "Mapping[str, Any]") -> str:
-        return self.expand(self.source, self.variables(values))
+        return self.expand(self.source, self._variables_read(values))
 
     def expand(self, text: str, variables: "Mapping[str, str]") -> str:
         """`text` with every placeholder substituted from `variables` (UPPER names)."""

@@ -253,7 +253,9 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
 
 Jinja and mako receive the data as it is. The other engines receive it
 through the loader's `DataEncoder`, which a subclass changes the way a
-`json.JSONEncoder` subclass does.
+`json.JSONEncoder` subclass does. A render reads the data in place and
+converts a top-level name only when the template reads it, so it costs what
+the template reads, not the size of the data it is handed.
 
 ```python
 DataEncoder(*, expose=(), max_depth=8)
@@ -363,7 +365,9 @@ rule. Names are root-relative, never relative to the including file.
   `strict` (renders empty otherwise). An included file that changes
   recompiles the template. `GoTemplate.DELIMITERS` is Go's `Delims`.
 - **Liquid, Handlebars, Mustache** read the data through
-  `DataEncoder.view`: structures as read-only mappings, lists as lists.
+  `DataEncoder.view`: structures as read-only mappings, lists as lists, each
+  top-level name converted when a template first reads it. An encoder whose
+  class overrides `view` has it called on the whole data, as before.
 - **Every engine keeps its own defaults**; tplx does not change them. In
   particular **Handlebars and Mustache HTML-escape `{{x}}`** (`&` is written
   `&amp;`), as their specifications say: write `{{{x}}}` (Mustache also
@@ -390,7 +394,9 @@ rule. Names are root-relative, never relative to the including file.
 - **Shell**: `%{NAME}` from `DataEncoder.flatten`, matched
   case-insensitively; by default `target.hostname` is `%{TARGET_HOSTNAME}`,
   list items are numbered, `None` renders empty, booleans `true`/`false`, and
-  an unexposed `_`-prefixed name is absent; `%{NAME:-default}` and
+  an unexposed `_`-prefixed name is absent. With the default `key` and
+  `flatten`, only the top-level names that could give one of the template's
+  words are flattened. `%{NAME:-default}` and
   `%{NAME-default}` as in POSIX shells, `%{NAME:1:3}` and `%{NAME: -2}` slices
   and `%{NAME/pattern/text}` (`//` all, `/#` start, `/%` end; the pattern a
   bash glob) as in bash; `%%` is `%`. A bare `%word` is text, and so is an

@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 import functools
 import json
-from collections import OrderedDict
-from typing import Any, FrozenSet, Mapping, Optional
+from collections import ChainMap, OrderedDict
+from typing import Any, FrozenSet, Iterator, Mapping, Optional
 
+from .._encoder import _Names
 from .._loader import Lookup
 from .._template import Template
 from ..exceptions import (
@@ -192,6 +193,33 @@ def _bound_filters(environment, limit: int) -> None:
     guard(environment.globals, "lipsum", lipsum)
 
 
+def _context(template: Any, data: "Mapping[str, Any]") -> Any:
+    """A render context reading `data` in place: Jinja's own `render` copies
+    every name into a new dict first."""
+    return template.new_context(ChainMap(data, template.globals), shared=True)
+
+
+def _generate(template: Any, data: "Mapping[str, Any]") -> Iterator[str]:
+    """`template.generate(data)` over `_context`."""
+    context = _context(template, data)
+    try:
+        yield from template.root_render_func(context)
+    except Exception:
+        yield template.environment.handle_exception()
+
+
+def _expression_value(compiled: Any, data: "Mapping[str, Any]") -> Any:
+    """What `compiled` (from `compile_expression`) gives over `data`, read in place."""
+    template = compiled._template
+    context = _context(template, data)
+    try:
+        for _ in template.root_render_func(context):
+            pass
+    except Exception:
+        template.environment.handle_exception()
+    return context.vars["result"]
+
+
 class JinjaTemplate(Template):
     """A Jinja template. Needs the **`jinja` extra**.
 
@@ -246,7 +274,7 @@ class JinjaTemplate(Template):
             cache = lookup.state(("jinja-expressions", cls), OrderedDict)
             compiled = cached(cache, expression, build)
         try:
-            result = compiled(**cls._data(lookup, values))
+            result = _expression_value(compiled, cls._data(lookup, values))
         except jinja2.UndefinedError as exc:
             raise UndefinedError(f"{expression!r}: {exc}") from exc
         except jinja2.exceptions.SecurityError as exc:
@@ -262,8 +290,8 @@ class JinjaTemplate(Template):
         """The data as Jinja reads it: as it is, or plain in a sandbox (no
         method of the caller's objects reachable)."""
         if lookup is not None and lookup.loader.sandbox:
-            return lookup.loader.encoder.view(values, plain=True)
-        return {str(k): v for k, v in values.items()}
+            return lookup.loader.encoder._names(values, plain=True)
+        return _Names(values)
 
     def references(self) -> FrozenSet[str]:
         from jinja2 import meta
@@ -293,9 +321,9 @@ class JinjaTemplate(Template):
             data = type(self)._data(self.lookup, values)
             limits = self.lookup.loader.limits if self.lookup is not None else None
             if limits is None:
-                return self._template.render(data)
+                return "".join(_generate(self._template, data))
             parts, size = [], 0
-            for part in self._template.generate(data):
+            for part in _generate(self._template, data):
                 size += len(part)
                 if size > limits.max_output:
                     raise SandboxError(

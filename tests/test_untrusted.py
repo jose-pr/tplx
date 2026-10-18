@@ -3,6 +3,7 @@
 import importlib.util
 import pathlib
 import re
+from collections.abc import Mapping
 
 import pytest
 
@@ -527,6 +528,52 @@ def test_eval_of_plain_text_never_reads_the_data():
         assert tplx.eval("web01.lan", data, engine=engine) == "web01.lan"
     with pytest.raises(RenderError, match="was read"):  # a template reads it
         tplx.eval("${a}", data)
+
+
+class _ReadOnly(Mapping):
+    """Data whose values fail the test when read, except the names in `allowed`."""
+
+    def __init__(self, allowed, **values):
+        self._values, self._allowed = values, set(allowed)
+
+    def __getitem__(self, key):
+        if key not in self._allowed:
+            raise AssertionError(f"{key!r} was read")
+        return self._values[key]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+
+@pytest.mark.parametrize("sandbox", [False, True])
+@pytest.mark.parametrize(
+    "module, engine, template, expected",
+    [
+        ("jinja2", "jinja", "{{ host }}", "web01"),
+        ("jinja2", "jinja", "at {{ host }}", "at web01"),
+        ("liquid", "liquid", "{{ host }}", "web01"),
+        ("liquid", "liquid", "at {{ host }}", "at web01"),
+        ("gotpl", "go", "{{ .host }}", "web01"),
+        ("gotpl", "go", "at {{ .host }}", "at web01"),
+        ("chevron", "mustache", "{{host}}", "web01"),
+        ("chevron", "mustache", "at {{host}}", "at web01"),
+        ("pybars", "handlebars", "{{host}}", "web01"),
+        ("pybars", "handlebars", "at {{host}}", "at web01"),
+        (None, "shell", "at %{HOST}", "at web01"),
+        (None, "envsubst", "at $HOST", "at web01"),
+    ],
+)
+def test_a_render_reads_only_the_names_its_template_does(
+    module, engine, template, expected, sandbox
+):
+    if module:
+        pytest.importorskip(module)
+    data = _ReadOnly({"host"}, host="web01", other={"deep": [1, 2]}, more=3)
+    loader = Loader([], sandbox=sandbox)
+    assert loader.eval(template, data, engine=engine) == expected
 
 
 def test_eval_honours_the_sandbox():

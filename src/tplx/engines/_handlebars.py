@@ -68,7 +68,7 @@ class HandlebarsTemplate(Template):
                     ("handlebars-helpers", cls), lambda: cls.configured(lookup, {})
                 )
             )
-            data = lookup.loader.encoder.view(values, plain=lookup.loader.sandbox)
+            data = lookup.loader.encoder._names(values, plain=lookup.loader.sandbox)
         helpers[CAPTURE_NAME] = lambda this, value=None, *rest, **keywords: capture(
             value
         )
@@ -121,7 +121,7 @@ class HandlebarsTemplate(Template):
         )
         return "".join(
             self._template(
-                self.encoder.view(values, plain=self.sandbox),
+                self.encoder._names(values, plain=self.sandbox),
                 helpers=helpers,
                 partials=partials,
             )

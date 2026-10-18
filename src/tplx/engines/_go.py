@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .._encoder import _Names
 from .._loader import Lookup
 from .._template import Template
 from . import _bounds as bounds
@@ -127,8 +128,8 @@ class GoTemplate(Template):
         """The data as gotpl reads it: in a sandbox, through `DataView`, which
         has no methods to call."""
         if lookup is not None and lookup.loader.sandbox:
-            return lookup.loader.encoder.view(values, plain=True)
-        return dict(values)
+            return lookup.loader.encoder._names(values, plain=True)
+        return _Names(values)
 
     @classmethod
     def _evaluate_expression(

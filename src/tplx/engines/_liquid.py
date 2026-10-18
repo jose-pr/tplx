@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from io import StringIO
 from contextvars import ContextVar
 from collections import OrderedDict
 from typing import Any, FrozenSet, Mapping, Optional
@@ -106,6 +107,17 @@ def _bound_filters(environment: Any, limit: int) -> None:
         filters["join"] = join
 
 
+def _render(template: Any, data: "Mapping[str, Any]") -> str:
+    """`template.render(**data)`, reading `data` in place instead of copying it."""
+    from liquid.output import LimitedStringIO
+
+    context = template.context_class(template, globals=template.make_globals(data))
+    limit = template.env.output_stream_limit
+    buffer = StringIO() if limit is None else LimitedStringIO(limit=limit)
+    template.render_with_context(context, buffer)
+    return buffer.getvalue()
+
+
 class LiquidTemplate(Template):
     """A Liquid template, rendered by python-liquid. Needs the **`liquid` extra**.
 
@@ -155,15 +167,14 @@ class LiquidTemplate(Template):
         else:
             cache = lookup.state(("liquid-expressions", cls), OrderedDict)
             template = cached(cache, expression, build)
-        encoder = lookup.loader.encoder if lookup is not None else None
         data = (
-            encoder.view(values, plain=lookup.loader.sandbox)
-            if encoder is not None
-            else dict(values)
+            lookup.loader.encoder._names(values, plain=lookup.loader.sandbox)
+            if lookup is not None
+            else values
         )
         with capturing() as box:
             try:
-                template.render(**data)
+                _render(template, data)
             except liquid.exceptions.UndefinedError as exc:
                 raise UndefinedError(f"{expression!r}: {exc}") from exc
             except liquid.exceptions.ResourceLimitError as exc:
@@ -194,8 +205,8 @@ class LiquidTemplate(Template):
     def render_values(self, values: "Mapping[str, Any]") -> str:
         token = _VALUES.set(values)
         try:
-            return self._template.render(
-                **self.encoder.view(values, plain=self.sandbox)
+            return _render(
+                self._template, self.encoder._names(values, plain=self.sandbox)
             )
         except self._liquid.exceptions.UndefinedError as exc:
             raise UndefinedError(f"{self.origin}: {exc}") from exc

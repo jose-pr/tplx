@@ -14,9 +14,21 @@ import logging
 import math
 import os
 import types
+from collections import ChainMap
 from collections.abc import Mapping
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
-from typing import Any, ClassVar, Dict, Iterable, Iterator, List, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 LOGGER = logging.getLogger("tplx")
 
@@ -85,6 +97,53 @@ class DataView(Mapping):
 
     def __repr__(self) -> str:
         return f"DataView({object.__getattribute__(self, '_obj')!r})"
+
+
+class _Names(Mapping):
+    """A render's top-level names, each converted only when the engine reads it.
+
+    A render reads a few of the names it is handed, so converting them all
+    first would make it cost the size of the data. Only `str` keys are names.
+    """
+
+    __slots__ = ("_values", "_convert", "_cache")
+
+    def __init__(
+        self,
+        values: "Mapping[str, Any]",
+        convert: "Optional[Callable[[Any], Any]]" = None,
+    ) -> None:
+        self._values = values
+        self._convert = convert
+        self._cache: Dict[str, Any] = {}
+
+    def __getitem__(self, name: str) -> Any:
+        if not isinstance(name, str):
+            raise KeyError(name)
+        cache = self._cache
+        if name in cache:
+            return cache[name]
+        value = self._values[name]
+        if self._convert is not None:
+            value = cache[name] = self._convert(value)
+        return value
+
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and name in self._values
+
+    def __iter__(self) -> Iterator[str]:
+        return (key for key in self._values if isinstance(key, str))
+
+    def __len__(self) -> int:
+        # Engines test the names for truth; counting them would read every key.
+        values = self._values
+        if isinstance(values, ChainMap):
+            return sum(len(layer) for layer in values.maps)  # at least the count
+        return len(values)
+
+    def copy(self) -> "ChainMap[str, Any]":
+        """A writable layer over these names; Jinja copies them to report an error."""
+        return ChainMap({}, self)
 
 
 #: What `DataEncoder._json` returns for a reference back to an object on the
@@ -255,6 +314,16 @@ class DataEncoder:
         return {
             str(key): self._wrap(value, plain, memo) for key, value in values.items()
         }
+
+    def _names(
+        self, values: "Mapping[str, Any]", *, plain: bool = False
+    ) -> "Mapping[str, Any]":
+        """`view`, each name converted when it is first read; a subclass's own
+        `view` is used as it is."""
+        if type(self).view is not DataEncoder.view:
+            return self.view(values, plain=plain)
+        memo: Dict[int, Any] = {}
+        return _Names(values, lambda value: self._wrap(value, plain, memo))
 
     def _items(self, mapping: "Mapping[Any, Any]") -> Iterator[Tuple[str, Any]]:
         """`mapping`'s items by name, without the `_`-prefixed names `expose` does not list.

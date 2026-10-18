@@ -4,7 +4,14 @@ from argparse import Namespace
 
 import pytest
 
-from tplx import JinjaTemplate, Loader, RenderError, ShellTemplate, UndefinedError
+from tplx import (
+    EnvsubstTemplate,
+    JinjaTemplate,
+    Loader,
+    RenderError,
+    ShellTemplate,
+    UndefinedError,
+)
 
 
 def render(source, mode="strict", cls=ShellTemplate, **data):
@@ -167,3 +174,15 @@ def test_two_keys_that_upper_case_alike_warn(caplog):
     with caplog.at_level(logging.WARNING, logger="tplx"):
         assert render("%{DOMAIN}", domain="a", DOMAIN="b") == "b"
     assert "two values" in caplog.text
+
+
+def test_references_follow_each_syntax():
+    class Unbraced(ShellTemplate):
+        PATTERN = "unbraced"
+
+    class Drone(EnvsubstTemplate):
+        DIALECT = "drone"
+
+    assert Unbraced("%A %{B}").references() == {"A"}
+    assert EnvsubstTemplate("$$A ${B}").references() == {"A", "B"}  # GNU: no escape
+    assert Drone("${#A} ${U:-${B}} $$C").references() == {"A", "U", "B"}

@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `eval` and `render` copied every name of the data before the engine looked
   at the text, so plain text cost the size of the data (1.3 ms against
   100,000 names). The data is passed through, and plain text never reads it.
+- A render still converted every top-level name before the template ran
+  (Jinja and Liquid copied them, a sandbox wrapped them, the shell engine
+  flattened them all), so a template reading one name cost the size of the
+  data. Jinja, Liquid, Go, Mustache and Handlebars now convert a name when
+  the template reads it, and the shell and envsubst engines flatten only the
+  top-level names their template could read.
+- `ShellTemplate.references()` (and envsubst's) raised `IndexError` for an
+  engine with only the bare `%NAME` form, read GNU envsubst's `$$A` as an
+  escape it does not have, and missed the name in `${#NAME}`; it now scans as
+  the render does.
 - The default engine was Python's `eval`, which ran code and no template;
   `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
   `tplx.PYTHON` are gone.

@@ -60,9 +60,9 @@ class MustacheTemplate(Template):
     ) -> Any:
         """A Mustache name (`a.b`, `.` for the whole data): the value it names."""
         current: Any = (
-            lookup.loader.encoder.view(values, plain=lookup.loader.sandbox)
+            lookup.loader.encoder._names(values, plain=lookup.loader.sandbox)
             if lookup is not None
-            else dict(values)
+            else values
         )
         path = expression.strip()
         if path != ".":
@@ -121,7 +121,7 @@ class MustacheTemplate(Template):
         )
         return self._chevron.render(
             self.source,
-            self.encoder.view(values, plain=self.sandbox),
+            self.encoder._names(values, plain=self.sandbox),
             partials_path=None,
             partials_dict=partials,
         )
