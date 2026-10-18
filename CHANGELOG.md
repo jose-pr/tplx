@@ -7,56 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-18
+
 ### Added
 
 - `Template.is_template(text)`: does a text hold the engine's syntax, without
   compiling it; every built-in engine finds only its own.
 - `DollarTemplate`: the shell syntax with `$` (`${HOST:-localhost}`),
-  registered for no suffix; the new `tplx.DEFAULT_ENGINE`.
+  registered for no suffix.
 - `SandboxLimits(timeout=..., max_memory=...)`: hard bounds on a sandboxed
   render. Setting either runs the loader's sandboxed renders and evals in a
   worker process the system holds to them (an address-space limit on Linux,
   a job object on Windows, a watch on macOS); going over raises
   `SandboxError` and replaces the worker. The data crosses by `pickle`.
 
+### Changed
+
+- `tplx.eval`, `Loader.eval` and `Lookup.eval` take a **template** where
+  `evaluate` took a bare expression, and the engine decides how to resolve it
+  (`Template.eval`): `"{{ port + 1 }}"` is `81`, `"Test {{ port }}"` is
+  `"Test 80"`, and text with no syntax comes back as it is, compiled never.
+- `tplx.DEFAULT_ENGINE` is `DollarTemplate`, which runs in a sandbox; it was
+  Python's `eval`, which ran code and no template.
+
+### Removed
+
+- `tplx.evaluate`, `Loader.evaluate` and `Lookup.evaluate`: use `eval` with a
+  template (`"{{ a.b * 2 }}"` for `"a.b * 2"`).
+- The `"python"` engine and `tplx.PYTHON`.
+- An engine's `Template.evaluate(expression)`: `Template.eval(text)` takes
+  the whole text, and a plugin engine that gave typed values overrides
+  `_evaluate_expression`.
+
 ### Fixed
 
-- `tplx.evaluate` and `Loader.evaluate` took a bare expression where a
-  template engine takes a template. They are now `tplx.eval` and
-  `Loader.eval`, and the engine decides (`Template.eval`): `"{{ port + 1 }}"`
-  is `81`, `"Test {{ port }}"` is `"Test 80"`, and text with no syntax comes
-  back as it is, compiled never.
 - `eval` and `render` copied every name of the data before the engine looked
-  at the text, so plain text cost the size of the data (1.3 ms against
-  100,000 names). The data is passed through, and plain text never reads it.
-- A render still converted every top-level name before the template ran
-  (Jinja and Liquid copied them, a sandbox wrapped them, the shell engine
-  flattened them all), so a template reading one name cost the size of the
-  data. Jinja, Liquid, Go, Mustache and Handlebars now convert a name when
-  the template reads it, and the shell and envsubst engines flatten only the
-  top-level names their template could read.
+  at the text, so plain text cost the size of the data. The data is passed
+  through, and plain text never reads it.
+- A render converted every top-level name before the template ran (Jinja and
+  Liquid copied them, a sandbox wrapped them, the shell engine flattened them
+  all), so a template reading one name cost the size of the data. Jinja,
+  Liquid, Go, Mustache and Handlebars now convert a name when the template
+  reads it, and the shell and envsubst engines flatten only the top-level
+  names their template could read.
+- A sandboxed template or expression could make the process allocate without
+  bound (`"x" * 10**10`, `[0] * 50000000`, `"x".center(n)`, a format width,
+  Go's `printf` width): `SandboxLimits.max_output` now bounds every value a
+  sandboxed template builds, refused before it is allocated, and every value
+  `eval` returns.
+- A function written in Python (a `def`) given in the data or `globals` reached
+  a sandboxed template, and Liquid, Handlebars and Mustache, as a read-only
+  view of its attributes, so calling it failed; it now stays callable, as
+  documented.
 - `ShellTemplate.references()` (and envsubst's) raised `IndexError` for an
   engine with only the bare `%NAME` form, read GNU envsubst's `$$A` as an
   escape it does not have, and missed the name in `${#NAME}`; it now scans as
   the render does.
 - A `TemplateNotFound` that was pickled came back with its message wrapped
   in a second one.
-- A function written in Python (a `def`) given in the data or `globals` reached
-  a sandboxed template, and Liquid, Handlebars and Mustache, as a read-only
-  view of its attributes, so calling it failed; it now stays callable, as
-  documented.
-- The default engine was Python's `eval`, which ran code and no template;
-  `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
-  `tplx.PYTHON` are gone.
-- An engine's `Template.evaluate(expression)` is gone: `Template.eval(text)`
-  takes the whole text, and a plugin engine that gave typed values overrides
-  `_evaluate_expression`.
-
-- A sandboxed template or expression could make the process allocate without
-  bound (`"x" * 10**10`, `[0] * 50000000`, `"x".center(n)`, a format width,
-  Go's `printf` width): `SandboxLimits.max_output` now bounds every value a
-  sandboxed template builds, refused before it is allocated, and every value
-  `eval` returns.
 
 ## [0.1.5] - 2026-10-15
 
@@ -179,7 +187,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TplxError` and its subclasses in `tplx.exceptions`; the `TPLX_RUBY` and
   `TPLX_PUPPET` environment variables.
 
-[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jose-pr/tplx/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/jose-pr/tplx/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/jose-pr/tplx/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/jose-pr/tplx/compare/v0.1.2...v0.1.3
