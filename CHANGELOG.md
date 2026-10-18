@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   engine with only the bare `%NAME` form, read GNU envsubst's `$$A` as an
   escape it does not have, and missed the name in `${#NAME}`; it now scans as
   the render does.
+- A function written in Python (a `def`) given in the data or `globals` reached
+  a sandboxed template, and Liquid, Handlebars and Mustache, as a read-only
+  view of its attributes, so calling it failed; it now stays callable, as
+  documented.
 - The default engine was Python's `eval`, which ran code and no template;
   `tplx.DEFAULT_ENGINE` is now `DollarTemplate`, and `"python"` and
   `tplx.PYTHON` are gone.

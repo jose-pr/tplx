@@ -257,6 +257,19 @@ def test_in_a_sandbox_a_rich_value_is_its_text_and_a_given_function_still_works(
     assert rendered == "/srv/tftp|False|A"
 
 
+def _twice(value):
+    return value * 2
+
+
+@pytest.mark.parametrize("sandbox", [False, True])
+def test_a_function_defined_in_python_stays_callable(sandbox):
+    pytest.importorskip("jinja2")
+    loader = Loader([], sandbox=sandbox)
+    assert loader.eval("{{ f(2) }}", {"f": _twice}, engine="jinja") == 4
+    assert loader.eval("x{{ f(2) }}", {"f": _twice}, engine="jinja") == "x4"
+    assert loader.encoder.wrap(_twice, plain=sandbox) is _twice
+
+
 # -- what a sandboxed render may cost ------------------------------------------------
 
 from tplx import SandboxLimits  # noqa: E402

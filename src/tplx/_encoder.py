@@ -290,6 +290,8 @@ class DataEncoder:
         """`wrap`, remembering the lists already converted in `memo` (by id)."""
         if isinstance(value, (list, tuple)) and id(value) in memo:
             return memo[id(value)]
+        if _is_function(value):
+            return value  # has a `__dict__`, but is to be called, not read
         found = self.structure(value)
         if isinstance(found, DataView):
             if plain and not object.__getattribute__(found, "_plain"):
