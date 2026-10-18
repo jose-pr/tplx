@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Tuple, Union
 
 __all__ = [
     "TplxError",
@@ -38,6 +38,10 @@ class TemplateNotFound(TplxError, LookupError):
                 tried = ", ".join(repr(each) for each in self.names)
                 message = f"none of these templates was found: {tried}"
         super().__init__(message)
+
+    def __reduce__(self) -> "Tuple[type, Tuple[Tuple[str, ...], str]]":
+        # Pickled as built, so it crosses back from a sandbox's worker intact.
+        return type(self), (self.names, str(self))
 
 
 class NoEngineError(TplxError):

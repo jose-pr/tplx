@@ -73,7 +73,9 @@ string template, cached, and `Template.references()` lists the names it
 reads. `Loader(sandbox=True)` renders templates you do not trust: only the
 engines that can be sandboxed (Jinja's `SandboxedEnvironment`, Liquid,
 Mustache, Handlebars, Go, shell, envsubst, copy) take part, and a file another
-engine claims is refused before it is read.
+engine claims is refused before it is read. `Loader(sandbox=SandboxLimits(timeout=5,
+max_memory=256 * 2**20))` also bounds time and memory: the renders run in a worker
+process the operating system holds to them.
 
 ## Learn more
 

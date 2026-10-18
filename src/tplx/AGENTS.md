@@ -227,8 +227,8 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   data or `globals` stays callable; a class or a callable object does not
   (calling a class would build an object whose methods a template could reach).
 - **Cost**: `SandboxLimits(max_output=1_000_000, max_iterations=100_000,
-  max_depth=100)` bounds one render or evaluation; going over raises
-  `SandboxError`. `max_output` is also the largest **value** a sandboxed
+  max_depth=100, timeout=None, max_memory=None)` bounds one render or
+  evaluation; going over raises `SandboxError`. `max_output` is also the largest **value** a sandboxed
   template may build (characters, items or decimal digits), refused before it
   is allocated: in Jinja `*`, `**`, `+`, `%`, `~`, the `str` methods and
   filters that build by width or count (`center`, `ljust`, `rjust`, `zfill`,
@@ -241,8 +241,24 @@ do not trust. The data, `globals` and `configure` functions stay trusted.
   and Go stop as they reach it; Liquid and Go count loop iterations; Liquid,
   Go and includes of another engine's file count depth (Jinja's own includes
   end at Python's recursion limit, a `RenderError`). Jinja's sandbox caps
-  `range()` at 100,000. **Wall time is not bounded**: stop a runaway render
-  from outside (a worker process, a timeout).
+  `range()` at 100,000. Without `timeout`, **wall time is not bounded**.
+- **Hard bounds**: `timeout` (seconds) and `max_memory` (bytes, a positive
+  number each) run every sandboxed `render` and `eval` of the loader in a
+  **worker process**, which the system holds to them: a render past either
+  raises `SandboxError`, the worker is replaced, and this process is
+  untouched. `max_memory` is the worker's whole memory, interpreter and
+  engine libraries included (tens of MB): its address space on Linux, its
+  committed memory on Windows (a job object), its peak resident size on
+  macOS (watched, since macOS enforces no limit). One worker serves every
+  loader with the same configuration and limits, and keeps its templates
+  compiled; at most four stay alive, and each ends with this process.
+  Everything crosses by `pickle`: the data and `overrides` on every call, the
+  roots, engines, `globals`, encoder and `configure` when a worker starts. A
+  function in them must be importable by name (defined at a module's top
+  level; not a lambda, and not in the script run as `__main__`), else
+  `SandboxError` says what could not cross. The worker imports from this
+  process's `sys.path`. Text with no syntax returns without reaching the
+  worker. A `Template` from `get` or `compile` renders in this process.
 - The engine libraries' own sandboxes do the containing; the `jinja`,
   `liquid` and `mako` extras require releases with no published advisory
   (jinja2 3.1.6, python-liquid 2.2.1, mako 1.3.12).

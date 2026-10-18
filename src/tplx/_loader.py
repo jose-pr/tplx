@@ -56,13 +56,31 @@ class SandboxLimits:
 
     `max_output`: characters (or bytes) a render may produce. `max_iterations`:
     loop iterations, where the engine counts them. `max_depth`: nested
-    templates and includes. Wall time is not bounded here: a runaway render is
-    stopped from outside (a worker process, a timeout).
+    templates and includes. These are checked in this process, step by step.
+    `timeout` (seconds) and `max_memory` (bytes) are hard bounds: setting
+    either renders in a worker process the system holds to them.
     """
 
     max_output: int = 1_000_000
     max_iterations: int = 100_000
     max_depth: int = 100
+    timeout: Optional[float] = None
+    max_memory: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        for name in ("timeout", "max_memory"):
+            value = getattr(self, name)
+            if value is not None and not value > 0:
+                raise ValueError(
+                    f"SandboxLimits.{name} must be positive, not {value!r}"
+                )
+
+
+def _isolated(limits: "Optional[SandboxLimits]") -> bool:
+    """Do these limits need a worker process (a `timeout` or `max_memory`)?"""
+    return limits is not None and (
+        limits.timeout is not None or limits.max_memory is not None
+    )
 
 
 #: How deep the includes of the render in progress go (another engine's file).
@@ -626,6 +644,15 @@ class Lookup:
         :raises RenderError: the engine failed; `UndefinedError` for a missing
             name in `strict` mode. Also everything `get` raises.
         """
+        if _isolated(self.loader.limits):
+            from . import _isolate
+
+            request = ("render", self.candidates, self.paths, name)
+            return _isolate.call(
+                self.loader,
+                request + (dict(data or {}), overrides),
+                f"render {name!r}",
+            )
         return self._render_template(self.get(name), data, overrides)
 
     def _render_template(
@@ -678,6 +705,17 @@ class Lookup:
             _default_engine() if engine is None else engine, self.loader.engines
         )
         self._check_sandbox(choice, f"eval {text!r}")
+        if _isolated(self.loader.limits):
+            if not isinstance(text, str) or not choice.is_template(text):
+                return text
+            from . import _isolate
+
+            request = ("eval", self.candidates, self.paths, text)
+            return _isolate.call(
+                self.loader,
+                request + (dict(context or {}), choice, overrides),
+                f"eval {text!r}",
+            )
         values = _visible(self.loader.globals, context, overrides)
         try:
             result = choice.eval(text, values, lookup=self)

@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   compiling it; every built-in engine finds only its own.
 - `DollarTemplate`: the shell syntax with `$` (`${HOST:-localhost}`),
   registered for no suffix; the new `tplx.DEFAULT_ENGINE`.
+- `SandboxLimits(timeout=..., max_memory=...)`: hard bounds on a sandboxed
+  render. Setting either runs the loader's sandboxed renders and evals in a
+  worker process the system holds to them (an address-space limit on Linux,
+  a job object on Windows, a watch on macOS); going over raises
+  `SandboxError` and replaces the worker. The data crosses by `pickle`.
 
 ### Fixed
 
@@ -34,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   engine with only the bare `%NAME` form, read GNU envsubst's `$$A` as an
   escape it does not have, and missed the name in `${#NAME}`; it now scans as
   the render does.
+- A `TemplateNotFound` that was pickled came back with its message wrapped
+  in a second one.
 - A function written in Python (a `def`) given in the data or `globals` reached
   a sandboxed template, and Liquid, Handlebars and Mustache, as a read-only
   view of its attributes, so calling it failed; it now stays callable, as
