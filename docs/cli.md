@@ -15,8 +15,8 @@ tplx render nginx.conf -r templates --env -u debug       # envsubst from the env
 ```text
 tplx [--version]
 tplx render NAME... [-r ROOT]... [-p PATH]... [-u MODE] [--env] [-d FILE|-] [-s KEY=VALUE]... [-o FILE|-]
-tplx find NAME... [-r ROOT]... [-p PATH]... [--json]     (alias: which)
-tplx engines [--json]
+tplx find NAME... [-r ROOT]... [-p PATH]... [--format text|json | --json]     (alias: which)
+tplx engines [--format text|json | --json]
 ```
 
 - `NAME` is looked up in the roots; several names are tried in order and the
@@ -30,9 +30,10 @@ tplx engines [--json]
   `-s/--set key=value` over it (repeat; `a.b=v` nests and merges into
   `--data`; a value `json:...` is JSON); `-o/--output` a file or `-`. Output
   is written as bytes, unchanged.
-- `find` prints `<origin>\t<Engine>`, or `{"origin", "engine"}` with `--json`.
+- `find` prints `<origin>\t<Engine>`, or `{"origin", "engine"}` with `--json` (`--format json`).
 - `engines` prints `<Engine>\t<suffixes>\t<priority>` per engine, highest
-  priority first, or a JSON array with `--json`.
+  priority first, or a JSON array with `--json` (`--format json`). JSON is
+  indented by two spaces and keeps non-ASCII characters as they are.
 - `render` and `find` also take `-v`/`-q` and `--loglevel [NAME:]LEVEL`.
 
 Exit status: `0` done, `1` the operation failed (no such template, an engine

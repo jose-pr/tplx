@@ -156,3 +156,19 @@ def test_help_and_a_usage_error_still_raise_system_exit(capsys):
         with pytest.raises(SystemExit) as raised:
             main(argv)
         assert raised.value.code == status
+
+
+def test_format_json_is_the_same_as_json_and_indented(project, capsys):
+    assert main(["find", "net", "--format", "json"]) == 0
+    formatted = capsys.readouterr().out
+    assert main(["find", "net", "--json"]) == 0
+    assert capsys.readouterr().out == formatted
+    assert formatted.startswith('{\n  "origin": ')
+    assert main(["engines", "--format", "json"]) == 0
+    assert json.loads(capsys.readouterr().out)[0]["engine"] == "JinjaTemplate"
+
+
+def test_text_is_the_default_format(project, capsys):
+    assert main(["engines", "--format", "text"]) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("JinjaTemplate\t.j2 ")

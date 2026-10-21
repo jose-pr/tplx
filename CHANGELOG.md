@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `tplx` ends with status 130 and no traceback on Ctrl-C, and a closed standard
   output (a reader that went away, such as `| head`) ends with status 1 and no
   output, on Windows too. The `cli` extra requires `duho>=0.7.8,<0.8`.
+- `find` and `engines` take `--format text|json` as well as `--json`. The JSON is
+  now indented by two spaces and keeps non-ASCII characters (it was one line with
+  `\uXXXX` escapes); its keys and values and the text output are unchanged.
 
 ## [0.2.0] - 2026-10-18
 

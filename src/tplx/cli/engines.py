@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-import json
-
-from duho import Cmd
+from duho import Cmd, OutputArgs
 
 from .._registry import registered_engines, template_extensions
 
 __all__ = ["Engines"]
 
 
-class Engines(Cmd):
+class Engines(OutputArgs, Cmd):
     """List the registered engines, highest priority first, with their suffixes."""
 
     _parsername_ = "engines"
-
-    json_out: bool = False
-    "Print a JSON array instead of tab-separated text"
-    ("--json",)
 
     def __call__(self) -> int:
         rows = [
@@ -29,11 +23,11 @@ class Engines(Cmd):
             }
             for cls in registered_engines()
         ]
-        if self.json_out:
-            print(json.dumps(rows))
-        else:
-            for row in rows:
-                print(
-                    f"{row['engine']}\t{' '.join(row['suffixes'])}\t{row['priority']}"
-                )
+        self._output_(
+            rows,
+            text=lambda rows: "\n".join(
+                f"{row['engine']}\t{' '.join(row['suffixes'])}\t{row['priority']}"
+                for row in rows
+            ),
+        )
         return 0
