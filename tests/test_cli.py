@@ -133,3 +133,26 @@ def test_env_puts_the_environment_beneath_the_data(project, monkeypatch, capsys)
     argv = ["render", "app", "-r", "templates", "--env", "-s", "HOST=h1", "-u", "debug"]
     assert main(argv) == 0
     assert capsys.readouterr().out == "port=8080 host=h1 $request_uri\n"
+
+
+def test_ctrl_c_ends_with_130_and_a_closed_pipe_with_1(monkeypatch, capsys):
+    from tplx.cli.engines import Engines
+
+    def interrupted(self):
+        raise KeyboardInterrupt
+
+    def closed(self):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(Engines, "__call__", interrupted)
+    assert main(["engines"]) == 130
+    monkeypatch.setattr(Engines, "__call__", closed)
+    assert main(["engines"]) == 1
+    assert capsys.readouterr().err == ""
+
+
+def test_help_and_a_usage_error_still_raise_system_exit(capsys):
+    for argv, status in ((["--help"], 0), (["--version"], 0), (["bogus"], 2)):
+        with pytest.raises(SystemExit) as raised:
+            main(argv)
+        assert raised.value.code == status
