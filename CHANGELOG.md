@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
 ### Changed
 
 - `tplx` ends with status 130 and no traceback on Ctrl-C, and a closed standard
@@ -196,7 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `TplxError` and its subclasses in `tplx.exceptions`; the `TPLX_RUBY` and
   `TPLX_PUPPET` environment variables.
 
-[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jose-pr/tplx/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jose-pr/tplx/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jose-pr/tplx/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/jose-pr/tplx/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/jose-pr/tplx/compare/v0.1.3...v0.1.4
